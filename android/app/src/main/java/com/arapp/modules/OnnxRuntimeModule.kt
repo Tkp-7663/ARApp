@@ -1,6 +1,8 @@
 package com.arapp.modules
 
 import ai.onnxruntime.*
+import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtSession
 import com.facebook.react.bridge.*
 import kotlinx.coroutines.*
 import java.nio.FloatBuffer

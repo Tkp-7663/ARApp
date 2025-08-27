@@ -7,7 +7,7 @@ import {
 	PermissionsAndroid,
 	Platform,
 } from 'react-native';
-import ARSceneView from '../components/ARSceneView';
+import ARSceneViewMinimal from '../components/ARSceneViewMinimal'; // ใช้ตัว Minimal
 import { homeScreen } from '../styles/screenStyles';
 
 const HomeScreen = () => {
@@ -42,12 +42,7 @@ const HomeScreen = () => {
 			return;
 		}
 
-		try {
-			setIsARActive(true);
-		} catch (error) {
-			Alert.alert('Error', 'Failed to start AR session');
-			console.error('AR Start Error:', error);
-		}
+		setIsARActive(true);
 	};
 
 	const handleStopAR = () => {
@@ -56,7 +51,7 @@ const HomeScreen = () => {
 
 	if (isARActive) {
 		return (
-			<ARSceneView
+			<ARSceneViewMinimal
 				onClose={handleStopAR}
 				onError={error => {
 					Alert.alert('AR Error', error);
@@ -70,19 +65,10 @@ const HomeScreen = () => {
 		<View style={homeScreen.container}>
 			<Text style={homeScreen.title}>AR Alloy Wheel Detection</Text>
 			<Text style={homeScreen.subtitle}>Demo on Samsung Galaxy S23 Ultra</Text>
-			{/* <Text style={homeScreen.subtitle}>Samsung Galaxy S23 Ultra Demo</Text> */}
 
 			<TouchableOpacity style={homeScreen.startButton} onPress={handleStartAR}>
 				<Text style={homeScreen.buttonText}>Start AR Detection</Text>
 			</TouchableOpacity>
-
-			<View style={homeScreen.infoContainer}>
-				{/* <Text style={homeScreen.infoText}>• Point camera at alloy wheels</Text>
-				<Text style={homeScreen.infoText}>
-					• AI will detect and highlight wheels
-				</Text>
-				<Text style={homeScreen.infoText}>• Blue 3D boxes show AR positions</Text> */}
-			</View>
 		</View>
 	);
 };

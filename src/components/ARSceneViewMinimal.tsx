@@ -9,7 +9,6 @@ import {
 	AppStateStatus,
 	findNodeHandle,
 } from 'react-native';
-import { yoloInference } from '../utils/yoloInference';
 import { NativeModules } from 'react-native';
 import { arSceneView } from '../styles/componentStyles';
 
@@ -36,7 +35,7 @@ interface ARSceneViewProps {
 	onSceneReady?: () => void;
 }
 
-export const ARSceneView: React.FC<ARSceneViewProps> = ({
+const ARSceneViewMinimal: React.FC<ARSceneViewProps> = ({
 	style,
 	onClose,
 	onError,
@@ -44,8 +43,6 @@ export const ARSceneView: React.FC<ARSceneViewProps> = ({
 }) => {
 	const viewRef = useRef<View>(null);
 	const [isInitialized, setIsInitialized] = useState(false);
-	const [detections, setDetections] = useState<BoundingBox[]>([]);
-	const [isProcessing, setIsProcessing] = useState(false);
 	const appState = useRef(AppState.currentState);
 
 	// ขอ permission
@@ -84,7 +81,6 @@ export const ARSceneView: React.FC<ARSceneViewProps> = ({
 
 			setIsInitialized(true);
 			onSceneReady?.();
-			startFrameProcessing();
 		} catch (error) {
 			console.error('Failed to initialize AR scene:', error);
 			onError(
@@ -94,46 +90,6 @@ export const ARSceneView: React.FC<ARSceneViewProps> = ({
 			);
 		}
 	}, [onError, onSceneReady, requestCameraPermission]);
-
-	// Process frames (YOLO)
-	const startFrameProcessing = useCallback(() => {
-		const processFrame = async () => {
-			if (!isInitialized || isProcessing) return;
-
-			setIsProcessing(true);
-			try {
-				const frameData = await SceneViewModule.captureFrame?.();
-				if (!frameData) return;
-
-				const detectionResults = await yoloInference.detectWheels(frameData);
-				setDetections(detectionResults);
-
-				for (const detection of detectionResults) {
-					if (detection.confidence > 0.7) {
-						const centerX = detection.x + detection.width / 2;
-						const centerY = detection.y + detection.height / 2;
-
-						const pose6DoF: Pose6DoF = await SceneViewModule.hitTestWithOffset(
-							centerX,
-							centerY,
-							0.05,
-						);
-
-						if (pose6DoF) {
-							await SceneViewModule.renderBlueBox(pose6DoF);
-						}
-					}
-				}
-			} catch (err) {
-				console.error('Frame processing error:', err);
-			} finally {
-				setIsProcessing(false);
-			}
-		};
-
-		const intervalId = setInterval(processFrame, 100);
-		return () => clearInterval(intervalId);
-	}, [isInitialized, isProcessing]);
 
 	// lifecycle: appstate
 	const handleAppStateChange = useCallback(
@@ -180,34 +136,9 @@ export const ARSceneView: React.FC<ARSceneViewProps> = ({
 		};
 	}, [isInitialized]);
 
-	// UI overlay bounding boxes
-	const renderDetectionOverlays = () => {
-		return detections.map((detection, index) => (
-			<View
-				key={index}
-				style={[
-					arSceneView.boundingBox,
-					{
-						left: detection.x,
-						top: detection.y,
-						width: detection.width,
-						height: detection.height,
-					},
-				]}
-			>
-				<Text style={arSceneView.confidenceText}>
-					{(detection.confidence * 100).toFixed(1)}%
-				</Text>
-			</View>
-		));
-	};
-
 	return (
 		<View style={[arSceneView.container, style]}>
 			<View ref={viewRef} style={arSceneView.sceneView} collapsable={false} />
-			<View style={arSceneView.overlayContainer}>
-				{renderDetectionOverlays()}
-			</View>
 			<View style={arSceneView.controlPanel}>
 				<TouchableOpacity style={arSceneView.closeButton} onPress={onClose}>
 					<Text style={arSceneView.closeButtonText}>Close AR</Text>
@@ -216,13 +147,10 @@ export const ARSceneView: React.FC<ARSceneViewProps> = ({
 					<Text style={arSceneView.statusText}>
 						{isInitialized ? '✅ AR Active' : '⏳ Initializing...'}
 					</Text>
-					<Text style={arSceneView.statusText}>
-						Detections: {detections.length}
-					</Text>
 				</View>
 			</View>
 		</View>
 	);
 };
 
-export default ARSceneView;
+export default ARSceneViewMinimal;

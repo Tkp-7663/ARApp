@@ -3,12 +3,12 @@ import {
 	View,
 	Text,
 	TouchableOpacity,
-	StyleSheet,
 	Alert,
 	PermissionsAndroid,
 	Platform,
 } from 'react-native';
 import ARSceneView from '../components/ARSceneView';
+import { homeScreen } from '../styles/screenStyles';
 
 const HomeScreen = () => {
 	const [isARActive, setIsARActive] = useState(false);
@@ -67,66 +67,24 @@ const HomeScreen = () => {
 	}
 
 	return (
-		<View style={styles.container}>
-			<Text style={styles.title}>AR Alloy Wheel Detection</Text>
-			<Text style={styles.subtitle}>Demo on Samsung Galaxy S23 Ultra</Text>
-			{/* <Text style={styles.subtitle}>Samsung Galaxy S23 Ultra Demo</Text> */}
+		<View style={homeScreen.container}>
+			<Text style={homeScreen.title}>AR Alloy Wheel Detection</Text>
+			<Text style={homeScreen.subtitle}>Demo on Samsung Galaxy S23 Ultra</Text>
+			{/* <Text style={homeScreen.subtitle}>Samsung Galaxy S23 Ultra Demo</Text> */}
 
-			<TouchableOpacity style={styles.startButton} onPress={handleStartAR}>
-				<Text style={styles.buttonText}>Start AR Detection</Text>
+			<TouchableOpacity style={homeScreen.startButton} onPress={handleStartAR}>
+				<Text style={homeScreen.buttonText}>Start AR Detection</Text>
 			</TouchableOpacity>
 
-			<View style={styles.infoContainer}>
-				{/* <Text style={styles.infoText}>• Point camera at alloy wheels</Text>
-				<Text style={styles.infoText}>
+			<View style={homeScreen.infoContainer}>
+				{/* <Text style={homeScreen.infoText}>• Point camera at alloy wheels</Text>
+				<Text style={homeScreen.infoText}>
 					• AI will detect and highlight wheels
 				</Text>
-				<Text style={styles.infoText}>• Blue 3D boxes show AR positions</Text> */}
+				<Text style={homeScreen.infoText}>• Blue 3D boxes show AR positions</Text> */}
 			</View>
 		</View>
 	);
 };
-
-const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-		backgroundColor: '#1a1a1a',
-		justifyContent: 'center',
-		alignItems: 'center',
-		padding: 20,
-	},
-	title: {
-		fontSize: 28,
-		fontWeight: 'bold',
-		color: '#ffffff',
-		marginBottom: 8,
-		textAlign: 'center',
-	},
-	subtitle: {
-		fontSize: 16,
-		color: '#888888',
-		marginBottom: 40,
-	},
-	startButton: {
-		backgroundColor: '#0066cc',
-		paddingHorizontal: 40,
-		paddingVertical: 15,
-		borderRadius: 25,
-		marginBottom: 40,
-	},
-	buttonText: {
-		color: 'white',
-		fontSize: 18,
-		fontWeight: '600',
-	},
-	infoContainer: {
-		alignItems: 'flex-start',
-	},
-	infoText: {
-		color: '#cccccc',
-		fontSize: 14,
-		marginBottom: 8,
-	},
-});
 
 export default HomeScreen;

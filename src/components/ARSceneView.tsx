@@ -1,13 +1,17 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
 	View,
-	StyleSheet,
 	TouchableOpacity,
 	Text,
 	NativeModules,
 	findNodeHandle,
+	InteractionManager,
+	PermissionsAndroid,
+	Platform,
+	Alert,
 } from 'react-native';
 import { yoloInference } from '../utils/yoloInference.tsx';
+import { arSceneView } from '../styles/componentStyles.ts';
 
 interface BoundingBox {
 	x: number;
@@ -26,18 +30,78 @@ interface ARSceneViewProps {
 const { ARCoreModule, SceneViewModule } = NativeModules;
 
 const ARSceneView = ({ onClose, onError }: ARSceneViewProps) => {
-	const sceneViewRef = useRef(null);
+	const sceneViewRef = useRef<View>(null);
 	const [isInitialized, setIsInitialized] = useState(false);
 	const [detections, setDetections] = useState<BoundingBox[]>([]);
 	const [isProcessing, setIsProcessing] = useState(false);
+	const [isMounted, setIsMounted] = useState(false);
+
+	// ขอสิทธิ์กล้อง
+	const requestCameraPermission = useCallback(async () => {
+		if (Platform.OS !== 'android') return true;
+
+		try {
+			const granted = await PermissionsAndroid.request(
+				PermissionsAndroid.PERMISSIONS.CAMERA,
+				{
+					title: 'Camera Permission',
+					message: 'This app needs access to your camera for AR functionality.',
+					buttonNeutral: 'Ask Me Later',
+					buttonNegative: 'Cancel',
+					buttonPositive: 'OK',
+				}
+			);
+
+			if (granted === PermissionsAndroid.RESULTS.GRANTED) {
+				console.log('Camera permission granted');
+				return true;
+			} else {
+				console.log('Camera permission denied');
+				Alert.alert(
+					'Permission Required',
+					'Camera permission is required for AR functionality.',
+					[{ text: 'OK', onPress: onClose }]
+				);
+				return false;
+			}
+		} catch (err) {
+			console.warn('Permission error:', err);
+			return false;
+		}
+	}, [onClose]);
+
+	// ตรวจสอบว่า view mount แล้วหรือยัง
+	const handleViewLayout = useCallback(() => {
+		if (!isMounted) {
+			setIsMounted(true);
+		}
+	}, [isMounted]);
 
 	// Initialize AR session
 	useEffect(() => {
+		if (!isMounted) return; // รอจนกว่า view จะ mount เสร็จ
+
 		const initializeAR = async () => {
 			try {
+				// ขอสิทธิ์กล้องก่อน
+				const hasPermission = await requestCameraPermission();
+				if (!hasPermission) {
+					throw new Error('Camera permission denied');
+				}
+
+				// รอให้ interaction เสร็จสิ้น
+				await new Promise<void>(resolve =>
+					InteractionManager.runAfterInteractions(() => resolve())
+				);
+
+				// รอเพิ่มเติมเพื่อให้แน่ใจว่า view พร้อม
+				await new Promise<void>(resolve => setTimeout(resolve, 100));
+
 				const viewHandle = findNodeHandle(sceneViewRef.current);
+				console.log('View handle:', viewHandle); // Debug log
+				
 				if (!viewHandle) {
-					throw new Error('Scene view not found');
+					throw new Error('Scene view not found - view handle is null');
 				}
 
 				// Initialize ARCore
@@ -55,19 +119,31 @@ const ARSceneView = ({ onClose, onError }: ARSceneViewProps) => {
 				setIsInitialized(true);
 				startFrameProcessing();
 			} catch (error) {
+				console.error('AR Initialization error:', error); // Debug log
 				onError(
 					`AR Initialization failed: ${
 						error instanceof Error ? error.message : String(error)
-					}`,
+					}`
 				);
 			}
 		};
 
-		initializeAR();
-
+		// เพิ่ม delay เล็กน้อยก่อนเริ่ม initialization
+		const timeoutId = setTimeout(initializeAR, 200);
+		
 		return () => {
+			clearTimeout(timeoutId);
+		};
+	}, [isMounted, onError]);
+
+	// Cleanup effect แยกต่างหาก
+	useEffect(() => {
+		return () => {
+			// ตรวจสอบ null ก่อนเรียก
 			ARCoreModule.stopARSession?.();
-			SceneViewModule?.cleanup?.();
+			if (SceneViewModule && typeof SceneViewModule.cleanup === 'function') {
+				SceneViewModule.cleanup();
+			}
 		};
 	}, []);
 
@@ -88,19 +164,16 @@ const ARSceneView = ({ onClose, onError }: ARSceneViewProps) => {
 				// Process each detection for AR placement
 				for (const detection of detectionResults) {
 					if (detection.confidence > 0.7) {
-						// Calculate center point with offset
 						const centerX = detection.x + detection.width / 2;
 						const centerY = detection.y + detection.height / 2;
 
-						// Get 6DoF pose from hit test
 						const pose6DoF = await ARCoreModule.hitTestWithOffset(
 							centerX,
 							centerY,
-							0.05, // 5cm offset
+							0.05 // 5cm offset
 						);
 
 						if (pose6DoF) {
-							// Render blue AR box at 6DoF position
 							await SceneViewModule.renderBlueBox(pose6DoF);
 						}
 					}
@@ -122,7 +195,7 @@ const ARSceneView = ({ onClose, onError }: ARSceneViewProps) => {
 			<View
 				key={index}
 				style={[
-					styles.boundingBox,
+					arSceneView.boundingBox,
 					{
 						left: detection.x,
 						top: detection.y,
@@ -131,7 +204,7 @@ const ARSceneView = ({ onClose, onError }: ARSceneViewProps) => {
 					},
 				]}
 			>
-				<Text style={styles.confidenceText}>
+				<Text style={arSceneView.confidenceText}>
 					{(detection.confidence * 100).toFixed(1)}%
 				</Text>
 			</View>
@@ -139,90 +212,27 @@ const ARSceneView = ({ onClose, onError }: ARSceneViewProps) => {
 	};
 
 	return (
-		<View style={styles.container}>
-			{/* AR Scene View */}
-			<View ref={sceneViewRef} style={styles.sceneView} />
-
-			{/* Detection Overlays */}
-			<View style={styles.overlayContainer}>{renderDetectionOverlays()}</View>
-
-			{/* Control Panel */}
-			<View style={styles.controlPanel}>
-				<TouchableOpacity style={styles.closeButton} onPress={onClose}>
-					<Text style={styles.closeButtonText}>Close AR</Text>
+		<View style={arSceneView.container}>
+			<View 
+				ref={sceneViewRef} 
+				style={arSceneView.sceneView}
+				onLayout={handleViewLayout}
+				collapsable={false} // ป้องกันการ optimize view ออก
+			/>
+			<View style={arSceneView.overlayContainer}>{renderDetectionOverlays()}</View>
+			<View style={arSceneView.controlPanel}>
+				<TouchableOpacity style={arSceneView.closeButton} onPress={onClose}>
+					<Text style={arSceneView.closeButtonText}>Close AR</Text>
 				</TouchableOpacity>
-
-				<View style={styles.statusContainer}>
-					<Text style={styles.statusText}>
-						{isInitialized ? '✅ AR Active' : '⏳ Initializing...'}
+				<View style={arSceneView.statusContainer}>
+					<Text style={arSceneView.statusText}>
+						{isInitialized ? '✅ AR Active' : isMounted ? '⏳ Initializing...' : '📱 Setting up view...'}
 					</Text>
-					<Text style={styles.statusText}>Detections: {detections.length}</Text>
+					<Text style={arSceneView.statusText}>Detections: {detections.length}</Text>
 				</View>
 			</View>
 		</View>
 	);
 };
-
-const styles = StyleSheet.create({
-	container: {
-		flex: 1,
-		backgroundColor: 'black',
-	},
-	sceneView: {
-		flex: 1,
-	},
-	overlayContainer: {
-		position: 'absolute',
-		top: 0,
-		left: 0,
-		right: 0,
-		bottom: 0,
-	},
-	boundingBox: {
-		position: 'absolute',
-		borderWidth: 2,
-		borderColor: 'red',
-		backgroundColor: 'transparent',
-	},
-	confidenceText: {
-		color: 'red',
-		fontSize: 12,
-		fontWeight: 'bold',
-		backgroundColor: 'rgba(255,255,255,0.8)',
-		paddingHorizontal: 4,
-		paddingVertical: 2,
-	},
-	controlPanel: {
-		position: 'absolute',
-		bottom: 30,
-		left: 20,
-		right: 20,
-		flexDirection: 'row',
-		justifyContent: 'space-between',
-		alignItems: 'center',
-	},
-	closeButton: {
-		backgroundColor: 'rgba(255,0,0,0.8)',
-		paddingHorizontal: 20,
-		paddingVertical: 10,
-		borderRadius: 20,
-	},
-	closeButtonText: {
-		color: 'white',
-		fontWeight: 'bold',
-	},
-	statusContainer: {
-		alignItems: 'flex-end',
-	},
-	statusText: {
-		color: 'white',
-		fontSize: 12,
-		backgroundColor: 'rgba(0,0,0,0.6)',
-		paddingHorizontal: 8,
-		paddingVertical: 4,
-		borderRadius: 8,
-		marginVertical: 2,
-	},
-});
 
 export default ARSceneView;

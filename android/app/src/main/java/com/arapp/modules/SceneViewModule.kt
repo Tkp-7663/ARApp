@@ -1,8 +1,11 @@
 package com.arapp.modules
 
-import android.view.View
 import com.facebook.react.bridge.*
 import com.facebook.react.uimanager.UIManagerModule
+import com.facebook.react.module.annotations.ReactModule
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Rotation
@@ -10,11 +13,12 @@ import io.github.sceneview.math.toQuaternion
 import io.github.sceneview.math.Color
 import io.github.sceneview.node.CubeNode
 import io.github.sceneview.material.setBaseColorFactor
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import com.facebook.react.module.annotations.ReactModule
 import android.view.ViewGroup
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import android.app.Activity
 
 @ReactModule(name = "SceneViewModule")
 class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -25,30 +29,56 @@ class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     private val arNodes = mutableListOf<CubeNode>()
     private val scope = CoroutineScope(Dispatchers.Main)
 
+    private fun requestCameraPermission(onGranted: () -> Unit) {
+        val currentActivity: Activity = currentActivity ?: return
+
+        if (ContextCompat.checkSelfPermission(
+                currentActivity,
+                Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            onGranted()
+        } else {
+            ActivityCompat.requestPermissions(
+                currentActivity,
+                arrayOf(Manifest.permission.CAMERA),
+                1001
+            )
+        }
+    }
+
     @ReactMethod
     fun initializeScene(viewTag: Int, promise: Promise) {
         val uiManager = reactApplicationContext.getNativeModule(UIManagerModule::class.java)
         uiManager?.addUIBlock { nativeViewHierarchyManager ->
             try {
-                val view = nativeViewHierarchyManager.resolveView(viewTag) as? View
+                val view = nativeViewHierarchyManager.resolveView(viewTag) as? ViewGroup
                 if (view == null) {
                     promise.reject("ERROR", "Could not find view with tag: $viewTag")
                     return@addUIBlock
                 }
 
-                if (view is ViewGroup) {
-                    // สร้าง ARSceneView และตั้งค่า
+                requestCameraPermission {
+                    // สร้าง ARSceneView
                     arSceneView = ARSceneView(reactApplicationContext).apply {
+                        setLayoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                            )
                         planeRenderer.isEnabled = true
                         planeRenderer.isShadowReceiver = true
                         lightEstimator?.environmentalHdrMainLightDirection = true
-                    }
-                    // เพิ่ม ARSceneView ลงใน container
+                        isEnabled = true
+                        onVisibilityAggregated = true
+                        }
+                    // arSceneView?.layoutParams = ViewGroup.LayoutParams(
+                    //     ViewGroup.LayoutParams.MATCH_PARENT,
+                    //     ViewGroup.LayoutParams.MATCH_PARENT
+                    // )
+                    // เพิ่ม ARSceneView ลง container
                     view.addView(arSceneView)
 
                     promise.resolve(null)
-                } else {
-                    promise.reject("ERROR", "View is not a ViewGroup and cannot contain ARSceneView")
                 }
             } catch (e: Exception) {
                 promise.reject("ERROR", "Scene initialization failed: ${e.message}")
@@ -82,11 +112,16 @@ class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
                         positionArray.getDouble(1).toFloat(),
                         positionArray.getDouble(2).toFloat()
                     )
-                    val rotationEuler = Rotation(
+                    worldRotation = Rotation(
                         rotationArray.getDouble(0).toFloat(),
                         rotationArray.getDouble(1).toFloat(),
                         rotationArray.getDouble(2).toFloat()
                     )
+                    // val rotationEuler = Rotation(
+                    //     rotationArray.getDouble(0).toFloat(),
+                    //     rotationArray.getDouble(1).toFloat(),
+                    //     rotationArray.getDouble(2).toFloat()
+                    // )
                     // worldRotation = rotationEuler.toQuaternion()
                 }
                 arSceneView?.addChildNode(cubeNode)

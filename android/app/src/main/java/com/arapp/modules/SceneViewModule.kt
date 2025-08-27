@@ -3,14 +3,12 @@ package com.arapp.modules
 import android.view.View
 import com.facebook.react.bridge.*
 import com.facebook.react.uimanager.UIManagerModule
-import io.github.sceneview.ar.ArSceneView
-import io.github.sceneview.ar.node.ArModelNode
+import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Rotation
 import io.github.sceneview.node.CubeNode
-import io.github.sceneview.ArSceneView
-import io.github.sceneview.node.ArModelNode
-import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.facebook.react.module.annotations.ReactModule
 
@@ -19,31 +17,33 @@ class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     override fun getName() = "SceneViewModule"
 
-    private var arSceneView: ArSceneView? = null
-    private val arNodes = mutableListOf<ArModelNode>()
+    private var arSceneView: ARSceneView? = null
+    private val arNodes = mutableListOf<CubeNode>()
+    private val scope = CoroutineScope(Dispatchers.Main)
 
     @ReactMethod
     fun initializeScene(viewTag: Int, promise: Promise) {
         val uiManager = reactApplicationContext.getNativeModule(UIManagerModule::class.java)
-        
         uiManager?.addUIBlock { nativeViewHierarchyManager ->
             try {
                 val view = nativeViewHierarchyManager.resolveView(viewTag) as? View
-                if (view != null) {
-                    // Create AR SceneView
-                    arSceneView = ArSceneView(reactApplicationContext).apply {
-                        // Configure SceneView settings
-                        planeRenderer.isEnabled = true
-                        planeRenderer.isShadowReceiver = true
-                        
-                        // Set up lighting
-                        lightEstimationMode = io.github.sceneview.ar.ArSceneView.LightEstimationMode.ENVIRONMENTAL_HDR
-                    }
-                    
-                    promise.resolve(null)
-                } else {
+                if (view == null) {
                     promise.reject("ERROR", "Could not find view with tag: $viewTag")
+                    return@addUIBlock
                 }
+
+                // สร้าง ArSceneView และเพิ่มลงใน view ที่มีอยู่
+                arSceneView = ARSceneView(reactApplicationContext).apply {
+                    planeRenderer.isEnabled = true
+                    planeRenderer.isShadowReceiver = true
+                    lightEstimator.environmentalHdrMainLightDirection = true
+                }
+                // view เป็น container ของ arSceneView
+                if (view is androidx.constraintlayout.widget.ConstraintLayout) {
+                    view.addView(arSceneView)
+                }
+
+                promise.resolve(null)
             } catch (e: Exception) {
                 promise.reject("ERROR", "Scene initialization failed: ${e.message}")
             }
@@ -57,72 +57,49 @@ class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
             return
         }
 
-        try {
-            val position = pose6DoF.getArray("position")
-            val rotation = pose6DoF.getArray("rotation")
-            
-            if (position == null || rotation == null) {
-                promise.reject("ERROR", "Invalid pose data")
-                return
-            }
+        val positionArray = pose6DoF.getArray("position")
+        val rotationArray = pose6DoF.getArray("rotation")
+        if (positionArray == null || rotationArray == null) {
+            promise.reject("ERROR", "Invalid pose data")
+            return
+        }
 
-            GlobalScope.launch {
-                try {
-                    // Create blue cube node
-                    val cubeNode = CubeNode().apply {
-                        // Set size (10cm cube)
-                        scale = Position(0.1f, 0.1f, 0.1f)
-                        
-                        // Set blue material color
-                        setMaterialColor(
-                            android.graphics.Color.BLUE,
-                            android.graphics.Color.BLUE,
-                            android.graphics.Color.BLUE,
-                            android.graphics.Color.BLUE
-                        )
-                        
-                        // Set position from 6DoF pose
-                        worldPosition = Position(
-                            position.getDouble(0).toFloat(),
-                            position.getDouble(1).toFloat(),
-                            position.getDouble(2).toFloat()
-                        )
-                        
-                        // Set rotation from quaternion
-                        worldRotation = Rotation(
-                            rotation.getDouble(0).toFloat(), // qx
-                            rotation.getDouble(1).toFloat(), // qy
-                            rotation.getDouble(2).toFloat(), // qz
-                            rotation.getDouble(3).toFloat()  // qw
-                        )
-                    }
-
-                    // Add to scene
-                    arSceneView?.addChild(cubeNode)
-                    
-                    // Store reference for cleanup
-                    if (cubeNode is ArModelNode) {
-                        arNodes.add(cubeNode)
-                    }
-                    
-                    promise.resolve(null)
-                    
-                } catch (e: Exception) {
-                    promise.reject("ERROR", "Failed to render blue box: ${e.message}")
+        scope.launch {
+            try {
+                val cubeNode = CubeNode().apply {
+                    scale = Position(0.1f, 0.1f, 0.1f)
+                    setMaterialColor(
+                        android.graphics.Color.BLUE,
+                        android.graphics.Color.BLUE,
+                        android.graphics.Color.BLUE,
+                        android.graphics.Color.BLUE
+                    )
+                    worldPosition = Position(
+                        positionArray.getDouble(0).toFloat(),
+                        positionArray.getDouble(1).toFloat(),
+                        positionArray.getDouble(2).toFloat()
+                    )
+                    worldRotation = Rotation(
+                        rotationArray.getDouble(0).toFloat(),
+                        rotationArray.getDouble(1).toFloat(),
+                        rotationArray.getDouble(2).toFloat(),
+                        rotationArray.getDouble(3).toFloat()
+                    )
                 }
+
+                arSceneView?.addChildNode(cubeNode)
+                arNodes.add(cubeNode)
+                promise.resolve(null)
+            } catch (e: Exception) {
+                promise.reject("ERROR", "Failed to render blue box: ${e.message}")
             }
-            
-        } catch (e: Exception) {
-            promise.reject("ERROR", "Blue box rendering failed: ${e.message}")
         }
     }
 
     @ReactMethod
     fun clearAllBoxes(promise: Promise) {
         try {
-            arNodes.forEach { node ->
-                arSceneView?.removeChild(node)
-            }
+            arNodes.forEach { node -> arSceneView?.removeChildNode(node) }
             arNodes.clear()
             promise.resolve(null)
         } catch (e: Exception) {
@@ -133,7 +110,8 @@ class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
     @ReactMethod
     fun cleanup(promise: Promise? = null) {
         try {
-            clearAllBoxes(null)
+            arNodes.forEach { node -> arSceneView?.removeChildNode(node) }
+            arNodes.clear()
             arSceneView?.destroy()
             arSceneView = null
             promise?.resolve(null)

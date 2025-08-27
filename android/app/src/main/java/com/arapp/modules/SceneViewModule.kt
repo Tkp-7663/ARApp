@@ -6,11 +6,15 @@ import com.facebook.react.uimanager.UIManagerModule
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.Rotation
+import io.github.sceneview.math.toQuaternion
+import io.github.sceneview.math.Color
 import io.github.sceneview.node.CubeNode
+import io.github.sceneview.material.setBaseColorFactor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.facebook.react.module.annotations.ReactModule
+import android.view.ViewGroup
 
 @ReactModule(name = "SceneViewModule")
 class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -32,18 +36,20 @@ class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
                     return@addUIBlock
                 }
 
-                // สร้าง ArSceneView และเพิ่มลงใน view ที่มีอยู่
-                arSceneView = ARSceneView(reactApplicationContext).apply {
-                    planeRenderer.isEnabled = true
-                    planeRenderer.isShadowReceiver = true
-                    lightEstimator.environmentalHdrMainLightDirection = true
-                }
-                // view เป็น container ของ arSceneView
-                if (view is androidx.constraintlayout.widget.ConstraintLayout) {
+                if (view is ViewGroup) {
+                    // สร้าง ARSceneView และตั้งค่า
+                    arSceneView = ARSceneView(reactApplicationContext).apply {
+                        planeRenderer.isEnabled = true
+                        planeRenderer.isShadowReceiver = true
+                        lightEstimator?.environmentalHdrMainLightDirection = true
+                    }
+                    // เพิ่ม ARSceneView ลงใน container
                     view.addView(arSceneView)
-                }
 
-                promise.resolve(null)
+                    promise.resolve(null)
+                } else {
+                    promise.reject("ERROR", "View is not a ViewGroup and cannot contain ARSceneView")
+                }
             } catch (e: Exception) {
                 promise.reject("ERROR", "Scene initialization failed: ${e.message}")
             }
@@ -66,27 +72,23 @@ class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
         scope.launch {
             try {
-                val cubeNode = CubeNode().apply {
+                val cubeNode = CubeNode(
+                        engine = arSceneView!!.engine,
+                    ).apply {
                     scale = Position(0.1f, 0.1f, 0.1f)
-                    setMaterialColor(
-                        android.graphics.Color.BLUE,
-                        android.graphics.Color.BLUE,
-                        android.graphics.Color.BLUE,
-                        android.graphics.Color.BLUE
-                    )
+                    materialInstance?.setBaseColorFactor(Color(0.0f, 0.0f, 1.0f, 1.0f))
                     worldPosition = Position(
                         positionArray.getDouble(0).toFloat(),
                         positionArray.getDouble(1).toFloat(),
                         positionArray.getDouble(2).toFloat()
                     )
-                    worldRotation = Rotation(
+                    val rotationEuler = Rotation(
                         rotationArray.getDouble(0).toFloat(),
                         rotationArray.getDouble(1).toFloat(),
-                        rotationArray.getDouble(2).toFloat(),
-                        rotationArray.getDouble(3).toFloat()
+                        rotationArray.getDouble(2).toFloat()
                     )
+                    // worldRotation = rotationEuler.toQuaternion()
                 }
-
                 arSceneView?.addChildNode(cubeNode)
                 arNodes.add(cubeNode)
                 promise.resolve(null)

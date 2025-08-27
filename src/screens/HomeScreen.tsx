@@ -69,18 +69,19 @@ const HomeScreen = () => {
 	return (
 		<View style={styles.container}>
 			<Text style={styles.title}>AR Alloy Wheel Detection</Text>
-			<Text style={styles.subtitle}>Samsung Galaxy S23 Ultra Demo</Text>
+			<Text style={styles.subtitle}>Demo on Samsung Galaxy S23 Ultra</Text>
+			{/* <Text style={styles.subtitle}>Samsung Galaxy S23 Ultra Demo</Text> */}
 
 			<TouchableOpacity style={styles.startButton} onPress={handleStartAR}>
 				<Text style={styles.buttonText}>Start AR Detection</Text>
 			</TouchableOpacity>
 
 			<View style={styles.infoContainer}>
-				<Text style={styles.infoText}>• Point camera at alloy wheels</Text>
+				{/* <Text style={styles.infoText}>• Point camera at alloy wheels</Text>
 				<Text style={styles.infoText}>
 					• AI will detect and highlight wheels
 				</Text>
-				<Text style={styles.infoText}>• Blue 3D boxes show AR positions</Text>
+				<Text style={styles.infoText}>• Blue 3D boxes show AR positions</Text> */}
 			</View>
 		</View>
 	);

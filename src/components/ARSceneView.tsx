@@ -67,7 +67,7 @@ const ARSceneView = ({ onClose, onError }: ARSceneViewProps) => {
 
 		return () => {
 			ARCoreModule.stopARSession?.();
-			SceneViewModule.cleanup?.();
+			SceneViewModule?.cleanup?.();
 		};
 	}, []);
 

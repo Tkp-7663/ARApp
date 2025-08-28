@@ -6,14 +6,12 @@ import {
 	Platform,
 	PermissionsAndroid,
 	AppState,
-	AppStateStatus,
 	findNodeHandle,
 } from 'react-native';
-import { yoloInference } from '../utils/yoloInference';
 import { NativeModules } from 'react-native';
 import { arSceneView } from '../styles/componentStyles';
 
-const { SceneViewModule } = NativeModules;
+const { SceneViewModule, OnnxRuntimeModule } = NativeModules;
 
 interface BoundingBox {
 	x: number;
@@ -36,7 +34,7 @@ interface ARSceneViewProps {
 	onSceneReady?: () => void;
 }
 
-export const ARSceneView: React.FC<ARSceneViewProps> = ({
+const ARSceneView: React.FC<ARSceneViewProps> = ({
 	style,
 	onClose,
 	onError,
@@ -48,121 +46,102 @@ export const ARSceneView: React.FC<ARSceneViewProps> = ({
 	const [isProcessing, setIsProcessing] = useState(false);
 	const appState = useRef(AppState.currentState);
 
-	// ขอ permission
 	const requestCameraPermission = useCallback(async () => {
 		if (Platform.OS !== 'android') return true;
-
-		try {
-			const granted = await PermissionsAndroid.request(
-				PermissionsAndroid.PERMISSIONS.CAMERA,
-				{
-					title: 'Camera Permission',
-					message: 'This app needs camera access for AR functionality',
-					buttonNeutral: 'Ask Me Later',
-					buttonNegative: 'Cancel',
-					buttonPositive: 'OK',
-				},
-			);
-			return granted === PermissionsAndroid.RESULTS.GRANTED;
-		} catch (err) {
-			console.error('Permission error:', err);
-			return false;
-		}
+		const granted = await PermissionsAndroid.request(
+			PermissionsAndroid.PERMISSIONS.CAMERA,
+		);
+		return granted === PermissionsAndroid.RESULTS.GRANTED;
 	}, []);
 
-	// init scene
 	const initializeScene = useCallback(async () => {
 		try {
 			const granted = await requestCameraPermission();
 			if (!granted) throw new Error('Camera permission denied');
 
 			const reactTag = findNodeHandle(viewRef.current);
-			if (!reactTag) throw new Error('Could not find view reference');
+			if (!reactTag) throw new Error('View reference not found');
 
 			await SceneViewModule.initializeScene(reactTag);
 			await SceneViewModule.startARSession();
 
 			setIsInitialized(true);
 			onSceneReady?.();
-			startFrameProcessing();
-		} catch (error) {
-			console.error('Failed to initialize AR scene:', error);
+		} catch (err) {
 			onError(
-				error instanceof Error
-					? error.message
-					: 'Failed to initialize AR scene',
+				err instanceof Error ? err.message : 'Failed to initialize AR scene',
 			);
 		}
 	}, [onError, onSceneReady, requestCameraPermission]);
 
-	// Process frames (YOLO)
-	const startFrameProcessing = useCallback(() => {
-		const processFrame = async () => {
-			if (!isInitialized || isProcessing) return;
+	const processFrame = useCallback(async () => {
+		if (!isInitialized || isProcessing) return;
+		setIsProcessing(true);
 
-			setIsProcessing(true);
-			try {
-				const frameData = await SceneViewModule.captureFrame?.();
-				if (!frameData) return;
+		try {
+			const image = await SceneViewModule.captureAndDetect?.(); // native: returns YUV image
+			if (!image) return;
 
-				const detectionResults = await yoloInference.detectWheels(frameData);
-				setDetections(detectionResults);
+			// convert to FloatBuffer tensor
+			const tensorData = await SceneViewModule.convertYuvToTensor(image); // float array from native
+			if (!tensorData) return;
 
-				for (const detection of detectionResults) {
-					if (detection.confidence > 0.7) {
-						const centerX = detection.x + detection.width / 2;
-						const centerY = detection.y + detection.height / 2;
+			// inference
+			const detected: BoundingBox[] = await OnnxRuntimeModule.runInference(
+				tensorData,
+			);
+			setDetections(detected || []);
 
-						const pose6DoF: Pose6DoF = await SceneViewModule.hitTestWithOffset(
-							centerX,
-							centerY,
-							0.05,
-						);
+			// render AR boxes for confident detections
+			for (const det of detected || []) {
+				if (det.confidence > 0.7) {
+					const centerX = det.x + det.width / 2;
+					const centerY = det.y + det.height / 2;
 
-						if (pose6DoF) {
-							await SceneViewModule.renderBlueBox(pose6DoF);
-						}
-					}
+					const pose: Pose6DoF = await SceneViewModule.hitTestWithOffset(
+						centerX,
+						centerY,
+						0.05,
+					);
+					if (pose) await SceneViewModule.renderBlueBox(pose);
 				}
-			} catch (err) {
-				console.error('Frame processing error:', err);
-			} finally {
-				setIsProcessing(false);
 			}
-		};
-
-		const intervalId = setInterval(processFrame, 100);
-		return () => clearInterval(intervalId);
+		} catch (err) {
+			console.error('Frame processing error:', err);
+		} finally {
+			setIsProcessing(false);
+		}
 	}, [isInitialized, isProcessing]);
 
-	// lifecycle: appstate
+	useEffect(() => {
+		const timer = setTimeout(initializeScene, 100);
+		return () => clearTimeout(timer);
+	}, [initializeScene]);
+
+	// frame loop
+	useEffect(() => {
+		if (!isInitialized) return;
+		const intervalId = setInterval(processFrame, 100); // 10fps
+		return () => clearInterval(intervalId);
+	}, [isInitialized, processFrame]);
+
 	const handleAppStateChange = useCallback(
-		(nextAppState: AppStateStatus) => {
+		nextAppState => {
 			if (
 				appState.current.match(/inactive|background/) &&
 				nextAppState === 'active'
 			) {
-				if (isInitialized) {
-					SceneViewModule.resumeScene?.().catch(console.error);
-				}
+				if (isInitialized) SceneViewModule.resumeScene?.().catch(console.error);
 			} else if (
 				appState.current === 'active' &&
 				nextAppState.match(/inactive|background/)
 			) {
-				if (isInitialized) {
-					SceneViewModule.pauseScene?.().catch(console.error);
-				}
+				if (isInitialized) SceneViewModule.pauseScene?.().catch(console.error);
 			}
 			appState.current = nextAppState;
 		},
 		[isInitialized],
 	);
-
-	// mount/unmount
-	useEffect(() => {
-		const timer = setTimeout(initializeScene, 100);
-		return () => clearTimeout(timer);
-	}, [initializeScene]);
 
 	useEffect(() => {
 		const subscription = AppState.addEventListener(
@@ -174,33 +153,24 @@ export const ARSceneView: React.FC<ARSceneViewProps> = ({
 
 	useEffect(() => {
 		return () => {
-			if (isInitialized) {
-				SceneViewModule.cleanup?.().catch(console.error);
-			}
+			if (isInitialized) SceneViewModule.cleanup?.().catch(console.error);
 		};
 	}, [isInitialized]);
 
-	// UI overlay bounding boxes
-	const renderDetectionOverlays = () => {
-		return detections.map((detection, index) => (
+	const renderDetectionOverlays = () =>
+		detections.map((d, i) => (
 			<View
-				key={index}
+				key={i}
 				style={[
 					arSceneView.boundingBox,
-					{
-						left: detection.x,
-						top: detection.y,
-						width: detection.width,
-						height: detection.height,
-					},
+					{ left: d.x, top: d.y, width: d.width, height: d.height },
 				]}
 			>
 				<Text style={arSceneView.confidenceText}>
-					{(detection.confidence * 100).toFixed(1)}%
+					{(d.confidence * 100).toFixed(1)}%
 				</Text>
 			</View>
 		));
-	};
 
 	return (
 		<View style={[arSceneView.container, style]}>

@@ -8,7 +8,6 @@ import com.facebook.react.uimanager.ViewManager
 class ARPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
         return listOf(
-            ARCoreModule(reactContext),
             OnnxRuntimeModule(reactContext),
             SceneViewModule(reactContext)
         )

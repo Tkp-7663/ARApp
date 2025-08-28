@@ -1,6 +1,7 @@
 import React from 'react';
-import { SafeAreaView, StatusBar } from 'react-native';
-import HomeScreen from './screens/HomeScreen.tsx';
+import { StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import HomeScreen from './screens/HomeScreen';
 
 const App = () => {
 	return (

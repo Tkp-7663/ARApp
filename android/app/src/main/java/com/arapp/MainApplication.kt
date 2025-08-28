@@ -21,6 +21,7 @@ class MainApplication : MultiDexApplication(), ReactApplication {
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())
               add(ARPackage())
+              // add(ARSceneViewPackage())
             }
 
         override fun getJSMainModuleName(): String = "index"

@@ -1,11 +1,12 @@
 package com.arapp.modules
 
 import ai.onnxruntime.*
+import android.media.Image
 import com.facebook.react.bridge.*
 import kotlinx.coroutines.*
 import java.nio.FloatBuffer
-import java.util.*
 import com.facebook.react.module.annotations.ReactModule
+import com.arapp.utils.ImagesConverter
 
 @ReactModule(name = "OnnxRuntimeModule")
 class OnnxRuntimeModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -23,90 +24,69 @@ class OnnxRuntimeModule(reactContext: ReactApplicationContext) : ReactContextBas
         moduleScope.launch {
             try {
                 ortEnvironment = OrtEnvironment.getEnvironment()
-                
+
                 val modelBytes = reactApplicationContext.assets.open("yolov11n.onnx").readBytes()
-                
+
                 val sessionOptions = OrtSession.SessionOptions().apply {
                     addCPU(true)
                     setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
                     setIntraOpNumThreads(4)
                 }
-                
+
                 ortSession = ortEnvironment!!.createSession(modelBytes, sessionOptions)
                 isModelLoaded = true
-                
-                withContext(Dispatchers.Main) {
-                    promise.resolve(true)
-                }
-                
+
+                withContext(Dispatchers.Main) { promise.resolve(true) }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    promise.reject("ERROR", "Model initialization failed: ${e.message}")
-                }
+                withContext(Dispatchers.Main) { promise.reject("ERROR", "Model initialization failed: ${e.message}") }
             }
         }
     }
 
+    // รับ YUV frame จาก SceneViewModule เป็น argument
     @ReactMethod
-    fun runInference(tensorData: String, promise: Promise) {
-        if (!isModelLoaded || ortSession == null) {
-            promise.reject("ERROR", "Model not initialized")
+    fun runInferenceFromFrame(frame: Image, promise: Promise) {
+        if (!isModelLoaded) {
+            promise.reject("ERROR", "Model not loaded")
             return
         }
 
         moduleScope.launch {
+            var inputTensor: OnnxTensor? = null
+            var results: OrtSession.Result? = null
             try {
-                val decodedData = Base64.getDecoder().decode(tensorData)
-                val floatBuffer = FloatBuffer.allocate(decodedData.size / 4)
-                
-                for (i in decodedData.indices step 4) {
-                    val floatBits = ((decodedData[i].toInt() and 0xFF) shl 24) or
-                                    ((decodedData[i + 1].toInt() and 0xFF) shl 16) or
-                                    ((decodedData[i + 2].toInt() and 0xFF) shl 8) or
-                                    (decodedData[i + 3].toInt() and 0xFF)
-                    floatBuffer.put(Float.fromBits(floatBits))
-                }
-                
-                val inputArray = floatBuffer.array()
-                
-                val inputTensor = OnnxTensor.createTensor(
-                    ortEnvironment!!,
-                    FloatBuffer.wrap(inputArray),
-                    longArrayOf(1, 3, 640, 640)
-                )
-                
-                val inputName = ortSession!!.inputNames.iterator().next()
-                val results = ortSession!!.run(mapOf(inputName to inputTensor))
+                // แปลง YUV → Tensor
+                val tensorBuffer: FloatBuffer = ImagesConverter.convertYuvToTensor(frame)
 
-                // Process output
-                val outputTensor = results[0].value as Array<Array<FloatArray>>
-                val detections = processYoloOutput(outputTensor)
+                // สร้าง ONNX tensor
+                val shape = longArrayOf(1, 3, 320, 320)
+                inputTensor = OnnxTensor.createTensor(ortEnvironment, tensorBuffer, shape)
 
-                val detectionsArray = Arguments.createArray()
-                for (detection in detections) {
-                    val detectionArray = Arguments.createArray().apply {
-                        pushDouble(detection[0].toDouble()) // x
-                        pushDouble(detection[1].toDouble()) // y
-                        pushDouble(detection[2].toDouble()) // width
-                        pushDouble(detection[3].toDouble()) // height
-                        pushDouble(detection[4].toDouble()) // confidence
-                        pushDouble(detection[5].toDouble()) // class
-                    }
-                    detectionsArray.pushArray(detectionArray)
-                }
+                val inputs = mapOf("images" to inputTensor)
+                results = ortSession!!.run(inputs) // run inference
 
-                // Clean up
-                inputTensor.close()
-                results.close()
+                // สมมติ output อยู่ index 0
+                val rawOutput = results[0].value as Array<Array<FloatArray>>
+                val detections = processYoloOutput(rawOutput)
 
+                // ส่งกลับไป JS
                 withContext(Dispatchers.Main) {
-                    promise.resolve(detectionsArray)
+                    val array = Arguments.createArray()
+                    detections.forEach { det ->
+                        val detArray = Arguments.createArray()
+                        det.forEach { detArray.pushDouble(it.toDouble()) }
+                        array.pushArray(detArray)
+                    }
+                    promise.resolve(array)
                 }
 
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     promise.reject("ERROR", "Inference failed: ${e.message}")
                 }
+            } finally {
+                try { inputTensor?.close() } catch (_: Exception) {}
+                try { results?.it.close() } catch (_: Exception) {}
             }
         }
     }
@@ -116,10 +96,10 @@ class OnnxRuntimeModule(reactContext: ReactApplicationContext) : ReactContextBas
         val confidenceThreshold = 0.5f
         val iouThreshold = 0.4f
 
-        val predictions = output[0] 
+        val predictions = output[0]
 
         for (i in 0 until predictions[0].size) {
-            val confidence = predictions[4][i] 
+            val confidence = predictions[4][i]
             if (confidence > confidenceThreshold) {
                 var bestClass = 0
                 var bestScore = predictions[5][i]

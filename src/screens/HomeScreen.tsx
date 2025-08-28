@@ -7,7 +7,7 @@ import {
 	PermissionsAndroid,
 	Platform,
 } from 'react-native';
-import ARSceneViewMinimal from '../components/ARSceneViewMinimal'; // ใช้ตัว Minimal
+import ARSceneView from '../components/ARSceneView';
 import { homeScreen } from '../styles/screenStyles';
 
 const HomeScreen = () => {
@@ -41,17 +41,14 @@ const HomeScreen = () => {
 			Alert.alert('Error', 'Camera permission is required for AR');
 			return;
 		}
-
 		setIsARActive(true);
 	};
 
-	const handleStopAR = () => {
-		setIsARActive(false);
-	};
+	const handleStopAR = () => setIsARActive(false);
 
 	if (isARActive) {
 		return (
-			<ARSceneViewMinimal
+			<ARSceneView
 				onClose={handleStopAR}
 				onError={error => {
 					Alert.alert('AR Error', error);
@@ -65,7 +62,6 @@ const HomeScreen = () => {
 		<View style={homeScreen.container}>
 			<Text style={homeScreen.title}>AR Alloy Wheel Detection</Text>
 			<Text style={homeScreen.subtitle}>Demo on Samsung Galaxy S23 Ultra</Text>
-
 			<TouchableOpacity style={homeScreen.startButton} onPress={handleStartAR}>
 				<Text style={homeScreen.buttonText}>Start AR Detection</Text>
 			</TouchableOpacity>

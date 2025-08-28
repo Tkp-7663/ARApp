@@ -45,18 +45,11 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 	const [isMounted, setIsMounted] = useState(false);
 	const [detections, setDetections] = useState<BoundingBox[]>([]);
 	const [isProcessing, setIsProcessing] = useState(false);
+	const [isModelReady, setIsModelReady] = useState<boolean | null>(null); // ✅ เพิ่มสถานะ model
 	const appState = useRef(AppState.currentState);
 
-	// Debug: ตรวจสอบ modules
-	useEffect(() => {
-		console.log('Available NativeModules:', Object.keys(NativeModules));
-		console.log('SceneViewModule:', SceneViewModule);
-	}, []);
-
 	const handleViewLayout = useCallback(() => {
-		if (!isMounted) {
-			setIsMounted(true);
-		}
+		if (!isMounted) setIsMounted(true);
 	}, [isMounted]);
 
 	const requestCameraPermission = useCallback(async () => {
@@ -91,8 +84,6 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 			await new Promise<void>(resolve => setTimeout(resolve, 200));
 
 			const reactTag = findNodeHandle(viewRef.current);
-			console.log('View handle:', reactTag);
-
 			if (!reactTag) throw new Error('View reference not found');
 			if (!SceneViewModule) throw new Error('SceneViewModule is not available');
 			if (typeof SceneViewModule.initializeScene !== 'function')
@@ -102,18 +93,21 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 			await SceneViewModule.initializeScene(reactTag);
 			await SceneViewModule.startARSession();
 
-			// ✅ พยายาม init ONNX แต่ถ้าไม่ได้ ก็ไม่เป็นไร
+			// ✅ พยายาม init ONNX แต่ถ้าไม่ได้ ก็ยังเปิดกล้องได้
 			if (
 				OnnxRuntimeModule &&
 				typeof OnnxRuntimeModule.initializeModel === 'function'
 			) {
 				try {
 					await OnnxRuntimeModule.initializeModel();
+					setIsModelReady(true);
 					console.log('ONNX model initialized ✅');
 				} catch (onnxErr) {
-					console.warn('ONNX init failed, but camera is running:', onnxErr);
+					setIsModelReady(false);
+					console.warn('ONNX init failed, running AR camera only:', onnxErr);
 				}
 			} else {
+				setIsModelReady(false);
 				console.warn(
 					'OnnxRuntimeModule not available, running AR camera only.',
 				);
@@ -129,15 +123,14 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 		}
 	}, [isMounted, onError, onSceneReady, requestCameraPermission]);
 
+	// Frame processing
 	const processFrame = useCallback(async () => {
 		if (!isInitialized || isProcessing) return;
 		if (
 			!OnnxRuntimeModule ||
 			typeof OnnxRuntimeModule.runInferenceFromFrame !== 'function'
-		) {
-			// ❌ ถ้าไม่มี onnx ก็ไม่ต้องทำ inference
+		)
 			return;
-		}
 
 		setIsProcessing(true);
 		try {
@@ -178,10 +171,10 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 	}, [isMounted, initializeScene]);
 
 	useEffect(() => {
-		if (!isInitialized) return;
+		if (!isInitialized || isModelReady === false) return; // ถ้า model ใช้ไม่ได้ skip
 		const intervalId = setInterval(processFrame, 100);
 		return () => clearInterval(intervalId);
-	}, [isInitialized, processFrame]);
+	}, [isInitialized, isModelReady, processFrame]);
 
 	const renderDetectionOverlays = () =>
 		detections.map((d, i) => (
@@ -200,7 +193,6 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 
 	return (
 		<View style={[arSceneView.container, style]}>
-			{/* ✅ ใช้ NativeARSceneView แทน View ธรรมดา */}
 			<NativeARSceneView
 				ref={viewRef}
 				style={arSceneView.sceneView}
@@ -216,11 +208,15 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 				</TouchableOpacity>
 				<View style={arSceneView.statusContainer}>
 					<Text style={arSceneView.statusText}>
-						{isInitialized
-							? '✅ AR Active'
-							: isMounted
-							? '⏳ Initializing...'
-							: '📱 Setting up view...'}
+						{isInitialized ? '✅ AR Active' : '⏳ Initializing...'}
+					</Text>
+					<Text style={arSceneView.statusText}>
+						Model:{' '}
+						{isModelReady === null
+							? '⏳ Loading...'
+							: isModelReady
+							? '✅ Active'
+							: '❌ Error'}
 					</Text>
 					<Text style={arSceneView.statusText}>
 						Detections: {detections.length}

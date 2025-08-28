@@ -25,7 +25,7 @@ class OnnxRuntimeModule(reactContext: ReactApplicationContext) : ReactContextBas
             try {
                 ortEnvironment = OrtEnvironment.getEnvironment()
 
-                val modelBytes = reactApplicationContext.assets.open("yolov11n.onnx").readBytes()
+                val modelBytes = reactApplicationContext.assets.open("yolov11n.ort").readBytes()
 
                 val sessionOptions = OrtSession.SessionOptions().apply {
                     addCPU(true)
@@ -167,6 +167,7 @@ class OnnxRuntimeModule(reactContext: ReactApplicationContext) : ReactContextBas
         return intersectionArea / (box1Area + box2Area - intersectionArea)
     }
 
+    @Suppress("OVERRIDE_DEPRECATION")
     override fun onCatalystInstanceDestroy() {
         super.onCatalystInstanceDestroy()
         moduleScope.cancel()

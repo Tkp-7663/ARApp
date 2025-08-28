@@ -1,4 +1,6 @@
-import { StyleSheet } from "react-native";
+import { StyleSheet, Dimensions } from 'react-native';
+
+const { height: windowHeight } = Dimensions.get('screen');
 
 export const arSceneView = StyleSheet.create({
 	container: { flex: 1, backgroundColor: 'black' },
@@ -23,21 +25,24 @@ export const arSceneView = StyleSheet.create({
 		backgroundColor: 'rgba(0,0,0,0.5)',
 		padding: 2,
 	},
-	controlPanel: {
-		position: 'absolute',
-		bottom: 20,
-		left: 0,
-		right: 0,
-		alignItems: 'center',
-	},
+	// ปุ่ม Close AR ขยับขึ้น 20% ของความสูงจอ
 	closeButton: {
+		position: 'absolute',
+		bottom: windowHeight * 0.2,
+		left: '50%',
+		transform: [{ translateX: -50 }],
 		backgroundColor: 'red',
 		paddingHorizontal: 16,
 		paddingVertical: 8,
 		borderRadius: 8,
-		marginBottom: 8,
 	},
 	closeButtonText: { color: 'white', fontWeight: 'bold' },
-	statusContainer: { alignItems: 'center' },
+	// Status อยู่ล่างซ้าย ขยับขึ้น 10% ของความสูงจอ
+	statusContainer: {
+		position: 'absolute',
+		bottom: windowHeight * 0.1,
+		left: 10,
+		alignItems: 'flex-start',
+	},
 	statusText: { color: 'white' },
 });

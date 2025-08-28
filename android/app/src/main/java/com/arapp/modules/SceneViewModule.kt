@@ -1,16 +1,8 @@
 package com.arapp.modules
 
-import android.Manifest
-import android.app.Activity
-import android.content.pm.PackageManager
-import android.util.Log
-import android.view.View
-import android.view.ViewGroup
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
+import android.media.Image
 import com.facebook.react.bridge.*
-import com.facebook.react.uimanager.UIManagerModule
-import com.facebook.react.module.annotations.ReactModule
+import com.google.ar.core.TrackingState
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.math.Color
 import io.github.sceneview.math.Position
@@ -20,122 +12,46 @@ import io.github.sceneview.material.setBaseColorFactor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
+import com.facebook.react.module.annotations.ReactModule
 import com.arapp.utils.ImagesConverter
-import com.google.ar.core.TrackingState
-import android.media.Image
 
 @ReactModule(name = "SceneViewModule")
 class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
-    override fun getName() = "SceneViewModule"
+    override fun getName(): String = "SceneViewModule"
 
+    private val scope = CoroutineScope(Dispatchers.Main)
     private var arSceneView: ARSceneView? = null
     private val arNodes = mutableListOf<CubeNode>()
-    private val scope = CoroutineScope(Dispatchers.Main)
     private var isSceneReady = false
-    private val imageConverter = ImagesConverter()
 
-    companion object {
-        private const val CAMERA_PERMISSION_REQUEST = 1001
-        private const val TAG = "SceneViewModule"
-    }
+    private val imageConverter = ImagesConverter
 
-    private fun requestCameraPermission(promise: Promise) {
-        val currentActivity: Activity = currentActivity ?: run {
-            promise.reject("ERROR", "Current activity is null")
-            return
-        }
-
-        if (ContextCompat.checkSelfPermission(currentActivity, Manifest.permission.CAMERA)
-            == PackageManager.PERMISSION_GRANTED) {
-            promise.resolve(null)
-        } else {
-            ActivityCompat.requestPermissions(currentActivity,
-                arrayOf(Manifest.permission.CAMERA),
-                CAMERA_PERMISSION_REQUEST
-            )
-            promise.reject("PERMISSION_REQUIRED", "Camera permission is required")
-        }
-    }
-
-    private fun createARSceneView(): ARSceneView? {
-        val activity = currentActivity ?: return null
-        return ARSceneView(activity).apply {
-            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            planeRenderer.isEnabled = true
-            planeRenderer.isShadowReceiver = true
-            isEnabled = true
-        }
-    }
-
-    @ReactMethod
-    fun initializeScene(viewTag: Int, promise: Promise) {
-        val uiManager = reactApplicationContext.getNativeModule(UIManagerModule::class.java)
-        uiManager?.addUIBlock { nativeViewHierarchyManager ->
-            scope.launch {
-                try {
-                    val view = nativeViewHierarchyManager.resolveView(viewTag) as? ViewGroup
-                        ?: run {
-                            promise.reject("ERROR", "Could not find view with tag: $viewTag")
-                            return@launch
-                        }
-
-                    if (ContextCompat.checkSelfPermission(reactApplicationContext, Manifest.permission.CAMERA)
-                        == PackageManager.PERMISSION_GRANTED) {
-                        arSceneView = createARSceneView()
-                        arSceneView?.let { arView ->
-                            view.removeAllViews()
-                            view.addView(arView)
-                            promise.resolve(null)
-                        } ?: promise.reject("ERROR", "Failed to create ARSceneView")
-                    } else {
-                        requestCameraPermission(promise)
-                    }
-
-                } catch (e: Exception) {
-                    promise.reject("ERROR", "Scene initialization failed: ${e.message}")
-                }
-            }
-        }
+    fun setARSceneView(view: ARSceneView) {
+        arSceneView = view
     }
 
     @ReactMethod
     fun startARSession(promise: Promise) {
-        scope.launch {
-            try {
-                if (arSceneView == null) {
-                    promise.reject("ERROR", "ARSceneView not initialized")
-                    return@launch
-                }
-
-                var retryCount = 0
-                while (arSceneView?.session == null && retryCount < 20) {
-                    delay(250)
-                    retryCount++
-                }
-
-                if (arSceneView?.session != null) {
-                    isSceneReady = true
-                    promise.resolve(null)
-                } else {
-                    promise.reject("ERROR", "AR session failed to start")
-                }
-            } catch (e: Exception) {
-                promise.reject("ERROR", "Failed to start AR session: ${e.message}")
-            }
+        val view = arSceneView
+        if (view == null) {
+            promise.reject("ERROR", "ARSceneView not initialized")
+            return
         }
+        isSceneReady = true
+        promise.resolve(null)
     }
 
     @ReactMethod
     fun captureFrame(promise: Promise) {
-        if (!isSceneReady || arSceneView?.session == null) {
+        val view = arSceneView
+        if (!isSceneReady || view?.session == null) {
             promise.reject("ERROR", "AR session not ready")
             return
         }
 
         try {
-            val frame = arSceneView!!.session?.update() ?: run {
+            val frame = view.session?.update() ?: run {
                 promise.resolve(null)
                 return
             }
@@ -159,35 +75,38 @@ class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     @ReactMethod
     fun renderBlueBox(pose6DoF: ReadableMap, promise: Promise) {
-        if (!isSceneReady || arSceneView == null) {
+        val view = arSceneView
+        if (!isSceneReady || view == null) {
             promise.reject("ERROR", "AR session not ready")
             return
         }
 
-        val positionArray = pose6DoF.getArray("position")
-        val rotationArray = pose6DoF.getArray("rotation")
-        if (positionArray == null || rotationArray == null) {
-            promise.reject("ERROR", "Invalid pose data")
+        val posArray = pose6DoF.getArray("position") ?: run {
+            promise.reject("ERROR", "Invalid position")
+            return
+        }
+        val rotArray = pose6DoF.getArray("rotation") ?: run {
+            promise.reject("ERROR", "Invalid rotation")
             return
         }
 
         scope.launch {
             try {
-                val cubeNode = CubeNode(engine = arSceneView!!.engine).apply {
+                val cubeNode = CubeNode(engine = view.engine).apply {
                     scale = Position(0.1f, 0.1f, 0.1f)
                     materialInstance?.setBaseColorFactor(Color(0.0f, 0.0f, 1.0f, 1.0f))
                     worldPosition = Position(
-                        positionArray.getDouble(0).toFloat(),
-                        positionArray.getDouble(1).toFloat(),
-                        positionArray.getDouble(2).toFloat()
+                        posArray.getDouble(0).toFloat(),
+                        posArray.getDouble(1).toFloat(),
+                        posArray.getDouble(2).toFloat()
                     )
                     worldRotation = Rotation(
-                        rotationArray.getDouble(0).toFloat(),
-                        rotationArray.getDouble(1).toFloat(),
-                        rotationArray.getDouble(2).toFloat()
+                        rotArray.getDouble(0).toFloat(),
+                        rotArray.getDouble(1).toFloat(),
+                        rotArray.getDouble(2).toFloat()
                     )
                 }
-                arSceneView?.addChildNode(cubeNode)
+                view.addChildNode(cubeNode)
                 arNodes.add(cubeNode)
                 promise.resolve(null)
             } catch (e: Exception) {
@@ -198,43 +117,10 @@ class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     @ReactMethod
     fun clearAllBoxes(promise: Promise) {
-        try {
-            arNodes.forEach { node -> arSceneView?.removeChildNode(node) }
+        arSceneView?.let { view ->
+            arNodes.forEach { node -> view.removeChildNode(node) }
             arNodes.clear()
-            promise.resolve(null)
-        } catch (e: Exception) {
-            promise.reject("ERROR", "Failed to clear boxes: ${e.message}")
         }
-    }
-
-    @ReactMethod
-    fun pauseScene(promise: Promise?) {
-        isSceneReady = false
-        promise?.resolve(null)
-    }
-
-    @ReactMethod
-    fun resumeScene(promise: Promise?) {
-        isSceneReady = true
-        promise?.resolve(null)
-    }
-
-    @ReactMethod
-    fun cleanup(promise: Promise?) {
-        try {
-            isSceneReady = false
-            arNodes.forEach { node -> arSceneView?.removeChildNode(node) }
-            arNodes.clear()
-            arSceneView?.destroy()
-            arSceneView = null
-            promise?.resolve(null)
-        } catch (e: Exception) {
-            promise?.reject("ERROR", "Cleanup failed: ${e.message}")
-        }
-    }
-
-    override fun onCatalystInstanceDestroy() {
-        super.onCatalystInstanceDestroy()
-        cleanup(null)
+        promise.resolve(null)
     }
 }

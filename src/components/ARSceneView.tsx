@@ -62,8 +62,20 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 			const reactTag = findNodeHandle(viewRef.current);
 			if (!reactTag) throw new Error('View reference not found');
 
-			await SceneViewModule.initializeScene(reactTag);
-			await SceneViewModule.startARSession();
+			// เรียก Native Module ให้ตรงกับ SceneViewModule.kt
+			await new Promise((resolve, reject) => {
+				SceneViewModule.initializeScene(reactTag, {
+					resolve: resolve,
+					reject: (err: string) => reject(new Error(err)),
+				});
+			});
+
+			await new Promise((resolve, reject) => {
+				SceneViewModule.startARSession({
+					resolve: resolve,
+					reject: (err: string) => reject(new Error(err)),
+				});
+			});
 
 			setIsInitialized(true);
 			onSceneReady?.();
@@ -79,31 +91,45 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 		setIsProcessing(true);
 
 		try {
-			const image = await SceneViewModule.captureAndDetect?.(); // native: returns YUV image
+			const image: any = await new Promise((resolve, reject) => {
+				SceneViewModule.captureFrame({
+					resolve: resolve,
+					reject: (err: string) => reject(new Error(err)),
+				});
+			});
+
 			if (!image) return;
 
-			// convert to FloatBuffer tensor
-			const tensorData = await SceneViewModule.convertYuvToTensor(image); // float array from native
-			if (!tensorData) return;
-
 			// inference
-			const detected: BoundingBox[] = await OnnxRuntimeModule.runInference(
-				tensorData,
-			);
+			const detected: BoundingBox[] = await new Promise((resolve, reject) => {
+				OnnxRuntimeModule.runInferenceFromFrame(image, {
+					resolve: resolve,
+					reject: (err: string) => reject(new Error(err)),
+				});
+			});
+
 			setDetections(detected || []);
 
-			// render AR boxes for confident detections
+			// render AR boxes
 			for (const det of detected || []) {
 				if (det.confidence > 0.7) {
 					const centerX = det.x + det.width / 2;
 					const centerY = det.y + det.height / 2;
 
-					const pose: Pose6DoF = await SceneViewModule.hitTestWithOffset(
-						centerX,
-						centerY,
-						0.05,
-					);
-					if (pose) await SceneViewModule.renderBlueBox(pose);
+					// Native module ต้อง implement hitTestWithOffset หรือใช้ค่า default
+					const pose: Pose6DoF = await new Promise((resolve, reject) => {
+						SceneViewModule.hitTestWithOffset(centerX, centerY, 0.05, {
+							resolve: resolve,
+							reject: (err: string) => reject(new Error(err)),
+						});
+					});
+
+					await new Promise((resolve, reject) => {
+						SceneViewModule.renderBlueBox(pose, {
+							resolve: resolve,
+							reject: (err: string) => reject(new Error(err)),
+						});
+					});
 				}
 			}
 		} catch (err) {

@@ -86,7 +86,7 @@ class OnnxRuntimeModule(reactContext: ReactApplicationContext) : ReactContextBas
                 }
             } finally {
                 try { inputTensor?.close() } catch (_: Exception) {}
-                try { results?.it.close() } catch (_: Exception) {}
+                try { results?.close() } catch (_: Exception) {}
             }
         }
     }

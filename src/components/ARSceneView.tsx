@@ -16,7 +16,15 @@ import { arSceneView } from '../styles/componentStyles';
 const { SceneViewModule, OnnxRuntimeModule } = NativeModules;
 
 // เชื่อมกับ ARSceneViewManager.kt
-const NativeARSceneView = requireNativeComponent('ARSceneView');
+interface NativeARSceneViewProps {
+	ref?: React.Ref<any>;
+	style?: any;
+	onLayout?: () => void;
+	collapsable?: boolean;
+}
+
+const NativeARSceneView =
+	requireNativeComponent<NativeARSceneViewProps>('ARSceneView');
 
 interface BoundingBox {
 	x: number;
@@ -202,7 +210,7 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 			<View style={arSceneView.overlayContainer}>
 				{renderDetectionOverlays()}
 			</View>
-			<View style={arSceneView.controlPanel}>
+			<View>
 				<TouchableOpacity style={arSceneView.closeButton} onPress={onClose}>
 					<Text style={arSceneView.closeButtonText}>Close AR</Text>
 				</TouchableOpacity>

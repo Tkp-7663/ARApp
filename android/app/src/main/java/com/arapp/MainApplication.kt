@@ -10,8 +10,9 @@ import com.facebook.react.ReactPackage
 import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 import androidx.multidex.MultiDexApplication
-// import com.arapp.modules.ARPackage
+import com.facebook.react.shell.MainReactPackage
 import com.arapp.modules.ARSceneViewPackage
+import com.arapp.modules.OnnxRuntimePackage
 
 class MainApplication : MultiDexApplication(), ReactApplication {
 
@@ -22,7 +23,9 @@ class MainApplication : MultiDexApplication(), ReactApplication {
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())
               // add(ARPackage())
+              add(MainReactPackage())
               add(ARSceneViewPackage())
+              add(OnnxRuntimePackage())
             }
 
         override fun getJSMainModuleName(): String = "index"

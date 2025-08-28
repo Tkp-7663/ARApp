@@ -14,6 +14,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import com.facebook.react.module.annotations.ReactModule
 import com.arapp.utils.ImagesConverter
+import com.facebook.react.uimanager.UIManagerModule
+import com.facebook.react.uimanager.NativeViewHierarchyManager
+import com.facebook.react.uimanager.UIBlock
 
 @ReactModule(name = "SceneViewModule")
 class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
@@ -29,6 +32,28 @@ class SceneViewModule(reactContext: ReactApplicationContext) : ReactContextBaseJ
 
     fun setARSceneView(view: ARSceneView) {
         arSceneView = view
+    }
+
+    @ReactMethod
+    fun initializeScene(reactTag: Int, promise: Promise) {
+        val uiManager = reactApplicationContext.getNativeModule(UIManagerModule::class.java)
+
+        if (uiManager == null) {
+            promise.reject("ERROR", "UIManagerModule not found")
+            return
+        }
+
+        uiManager.addUIBlock(object : UIBlock {
+            override fun execute(nativeViewHierarchyManager: NativeViewHierarchyManager) {
+                val view = nativeViewHierarchyManager.resolveView(reactTag)
+                if (view is ARSceneView) {
+                    setARSceneView(view)
+                    promise.resolve(true)
+                } else {
+                    promise.reject("ERROR", "View is not ARSceneView")
+                }
+            }
+        })
     }
 
     @ReactMethod

@@ -22,8 +22,6 @@ class MainApplication : MultiDexApplication(), ReactApplication {
             PackageList(this).packages.apply {
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())
-              // add(ARPackage())
-              add(MainReactPackage())
               add(ARSceneViewPackage())
               add(OnnxRuntimePackage())
             }

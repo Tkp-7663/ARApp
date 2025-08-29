@@ -3,7 +3,7 @@ package com.arapp.modules
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import io.github.sceneview.ar.ARSceneView
-import com.arapp.modules.OnnxRuntimeHandler
+import com.arapp.utils.OnnxRuntimeHandler
 
 class ARActivity : ComponentActivity() {
 
@@ -13,7 +13,7 @@ class ARActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         // OnnxRuntimeHandler instance
-        val onnxHandler = OnnxRuntimeHandler(this)
+        val onnxHandler = OnnxRuntimeHandler(applicationContext)
         // ARSceneViewModule instance
         val sceneView = ARSceneViewModule(this)
 
@@ -21,34 +21,37 @@ class ARActivity : ComponentActivity() {
         arSceneView = ARSceneView(this).apply {
             // Callback capture frame
             onFrame = { frame ->
-                // send frame to OnnxHandler
-                val tensor = onnxHandler.convertYUVToTensor(frame)
-                val output = onnxHandler.runOnnxInference(tensor)
+                frame?.let { f ->
+                    // Convert frame เป็น tensor
+                    val tensor = onnxHandler.convertYUVToTensor(f)
+                    // Run inference
+                    val output = onnxHandler.runOnnxInference(tensor)
 
-                // render the onnx blue boxes
-                sceneView.renderOnnxBoxs(arSceneView, output)
+                    // Render blue boxes จาก Onnx
+                    sceneView.renderOnnxBoxs(this, output)
 
-                // render the model red boxes
-                val pos6dof = sceneView.getPos6dof(output)
-                sceneView.renderModelBoxes(arSceneView, pos6dof)
+                    // Render red boxes 3D model with position + rotation
+                    val pos6dof = sceneView.getPos6dof(output)
+                    sceneView.renderModelBoxes(this, pos6dof)
+                }
             }
         }
 
         setContentView(arSceneView)
     }
 
-    override fun onResume() {
-        super.onResume()
+    override fun onStart() {
+        super.onStart()
         arSceneView.resume()
     }
 
-    override fun onPause() {
-        super.onPause()
+    override fun onStop() {
         arSceneView.pause()
+        super.onStop()
     }
 
     override fun onDestroy() {
-        super.onDestroy()
         arSceneView.destroy()
+        super.onDestroy()
     }
 }

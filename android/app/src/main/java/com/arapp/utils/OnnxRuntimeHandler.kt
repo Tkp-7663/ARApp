@@ -1,38 +1,53 @@
 package com.arapp.utils
 
-import ai.onnxruntime.*
-import com.facebook.react.bridge.*
+import android.content.Context
+import android.graphics.Bitmap
 import android.media.Image
-import java.nio.FloatBuffer
-import java.nio.IntArray
-import com.facebook.react.module.annotations.ReactModule
+import ai.onnxruntime.*
 
-@ReactModule(name = "OnnxRuntimeHandler")
-class OnnxRuntimeHandler(private val context: Context) : ReactContextBaseJavaModule(reactContext) {
+class OnnxRuntimeHandler(private val context: Context) {
 
-    override fun getName() = "OnnxRuntimeHandler"
-    
-    const val MODEL = "yolov11n_fp16.onnx"
-    const val INPUT_SIZE = 320
+    companion object {
+        const val MODEL = "yolov11n_fp16.onnx"
+        const val INPUT_SIZE = 320
+    }
 
+    // ARCore Frame -> FloatArray Tensor
     fun convertYUVToTensor(frame: Image): FloatArray {
         val rgb = convertYUVToRGB(frame)
         val bitmap = convertRGBToBitmap(rgb, frame.width, frame.height)
-        val resized = resizeBitmap(bitmap, 320, 320)
+        val resized = resizeBitmap(bitmap, INPUT_SIZE, INPUT_SIZE)
         val tensor = convertBitmapToTensor(resized)
         return normalizeTensor(tensor)
     }
 
-    private fun convertYUVToRGB(frame: Image): IntArray {}
+    // YUV -> RGB
+    private fun convertYUVToRGB(frame: Image): IntArray {
+        TODO("Implement YUV_420_888 -> RGB conversion")
+    }
 
-    private fun convertRGBToBitmap(rgb: IntArray, width: Int, height: Int): Bitmap {}
-    
-    private fun resizeBitmap(bitmap: Bitmap, targetWidth: INPUT_SIZE, targetHeight: INPUT_SIZE): Bitmap {}
-    
-    private fun convertBitmapToTensor(bitmap: Bitmap): FloatBuffer {}
-    
-    private fun normalizeTensor(tensor: FloatArray): FloatBuffer {}
-    
-    private fun runOnnxInference(tensor: FloatArray): FloatBuffer {}
-    
+    // RGB array -> Bitmap
+    private fun convertRGBToBitmap(rgb: IntArray, width: Int, height: Int): Bitmap {
+        TODO("Implement conversion to Bitmap")
+    }
+
+    // Resize bitmap
+    private fun resizeBitmap(bitmap: Bitmap, targetWidth: Int, targetHeight: Int): Bitmap {
+        TODO("Implement resize using Bitmap.createScaledBitmap")
+    }
+
+    // Bitmap -> Tensor (FloatArray)
+    private fun convertBitmapToTensor(bitmap: Bitmap): FloatArray {
+        TODO("Implement conversion Bitmap -> FloatArray")
+    }
+
+    // Normalize tensor
+    private fun normalizeTensor(tensor: FloatArray): FloatArray {
+        TODO("Implement normalization, e.g., divide by 255f")
+    }
+
+    // Run inference with ONNX Runtime
+    fun runOnnxInference(tensor: FloatArray): FloatArray {
+        TODO("Implement ONNX Runtime inference and return output array")
+    }
 }

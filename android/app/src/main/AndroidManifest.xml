@@ -41,6 +41,13 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
+
+      <activity
+        android:name=".modules.ARActivity"
+        android:label="AR Scene View"
+        android:exported="false"
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar" />
+
       <meta-data android:name="com.google.ar.core" android:value="required" tools:replace="android:value"/>
     </application>
 </manifest>

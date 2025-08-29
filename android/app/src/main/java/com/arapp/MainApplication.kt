@@ -11,7 +11,7 @@ import com.facebook.react.defaults.DefaultReactHost.getDefaultReactHost
 import com.facebook.react.defaults.DefaultReactNativeHost
 import androidx.multidex.MultiDexApplication
 import com.facebook.react.shell.MainReactPackage
-import com.arapp.modules.ARSceneViewPackage
+import com.arapp.modules.ARLauncherPackage
 
 class MainApplication : MultiDexApplication(), ReactApplication {
 
@@ -21,7 +21,7 @@ class MainApplication : MultiDexApplication(), ReactApplication {
             PackageList(this).packages.apply {
               // Packages that cannot be autolinked yet can be added manually here, for example:
               // add(MyReactNativePackage())
-              add(ARSceneViewPackage())
+              add(ARLauncherPackage())
             }
 
         override fun getJSMainModuleName(): String = "index"

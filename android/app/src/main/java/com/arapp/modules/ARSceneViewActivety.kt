@@ -31,8 +31,8 @@ class ARActivity : ComponentActivity() {
                     sceneView.renderOnnxBoxs(this, output)
 
                     // Render red boxes 3D model with position + rotation
-                    val pos6dof = sceneView.getPos6dof(output)
-                    sceneView.renderModelBoxes(this, pos6dof)
+                    val pos6DoF = sceneView.getPos6DoF(output)
+                    sceneView.renderModelBoxes(this, pos6DoF)
                 }
             }
         }

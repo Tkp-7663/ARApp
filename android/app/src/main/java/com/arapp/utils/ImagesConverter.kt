@@ -2,7 +2,6 @@ package com.arapp.utils
 
 import android.graphics.*
 import android.media.Image
-import java.nio.ByteBuffer
 import java.nio.FloatBuffer
 
 object ImagesConverter {
@@ -18,6 +17,16 @@ object ImagesConverter {
         val bitmap = yuvToRgbBitmap(image)
         val resizedBitmap = Bitmap.createScaledBitmap(bitmap, INPUT_SIZE, INPUT_SIZE, true)
         return bitmapToNormalizedFloatBuffer(resizedBitmap)
+    }
+
+    /**
+     * Convert YUV Image to IntArray [0xRRGGBB]
+     */
+    fun yuvToRgb(image: Image): IntArray {
+        val bitmap = yuvToRgbBitmap(image)
+        val pixels = IntArray(bitmap.width * bitmap.height)
+        bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+        return pixels
     }
 
     private fun yuvToRgbBitmap(image: Image): Bitmap {

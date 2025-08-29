@@ -10,12 +10,12 @@ import {
 	NativeModules,
 	InteractionManager,
 	requireNativeComponent,
+	Alert,
 } from 'react-native';
 import { arSceneView } from '../styles/componentStyles';
 
-const { SceneViewModule, OnnxRuntimeModule } = NativeModules;
+const { SceneViewModule } = NativeModules;
 
-// เชื่อมกับ ARSceneViewManager.kt
 interface NativeARSceneViewProps {
 	ref?: React.Ref<any>;
 	style?: any;
@@ -25,15 +25,6 @@ interface NativeARSceneViewProps {
 
 const NativeARSceneView =
 	requireNativeComponent<NativeARSceneViewProps>('ARSceneView');
-
-interface BoundingBox {
-	x: number;
-	y: number;
-	width: number;
-	height: number;
-	confidence: number;
-	class: number;
-}
 
 interface ARSceneViewProps {
 	style?: any;
@@ -51,13 +42,13 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 	const viewRef = useRef(null);
 	const [isInitialized, setIsInitialized] = useState(false);
 	const [isMounted, setIsMounted] = useState(false);
-	const [detections, setDetections] = useState<BoundingBox[]>([]);
-	const [isProcessing, setIsProcessing] = useState(false);
-	const [isModelReady, setIsModelReady] = useState<boolean | null>(null); // ✅ เพิ่มสถานะ model
 	const appState = useRef(AppState.currentState);
 
 	const handleViewLayout = useCallback(() => {
-		if (!isMounted) setIsMounted(true);
+		if (!isMounted) {
+			console.log('📱 View mounted');
+			setIsMounted(true);
+		}
 	}, [isMounted]);
 
 	const requestCameraPermission = useCallback(async () => {
@@ -75,102 +66,54 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 			);
 			return granted === PermissionsAndroid.RESULTS.GRANTED;
 		} catch (err) {
-			console.warn('Permission error:', err);
+			console.warn('❌ Permission error:', err);
 			return false;
 		}
 	}, []);
 
 	const initializeScene = useCallback(async () => {
 		if (!isMounted) return;
+
 		try {
 			const granted = await requestCameraPermission();
-			if (!granted) throw new Error('Camera permission denied');
-
-			await new Promise<void>(resolve =>
-				InteractionManager.runAfterInteractions(() => resolve()),
-			);
-			await new Promise<void>(resolve => setTimeout(resolve, 200));
+			if (!granted) {
+				throw new Error('Camera permission denied');
+			}
 
 			const reactTag = findNodeHandle(viewRef.current);
 			if (!reactTag) throw new Error('View reference not found');
-			if (!SceneViewModule) throw new Error('SceneViewModule is not available');
-			if (typeof SceneViewModule.initializeScene !== 'function')
-				throw new Error('SceneViewModule.initializeScene is not a function');
 
-			// ✅ เปิดกล้องก่อน
-			await SceneViewModule.initializeScene(reactTag);
-			await SceneViewModule.startARSession();
-
-			// ✅ พยายาม init ONNX แต่ถ้าไม่ได้ ก็ยังเปิดกล้องได้
-			if (
-				OnnxRuntimeModule &&
-				typeof OnnxRuntimeModule.initializeModel === 'function'
-			) {
-				try {
-					await OnnxRuntimeModule.initializeModel();
-					setIsModelReady(true);
-					console.log('ONNX model initialized ✅');
-				} catch (onnxErr) {
-					setIsModelReady(false);
-					console.warn('ONNX init failed, running AR camera only:', onnxErr);
-				}
-			} else {
-				setIsModelReady(false);
-				console.warn(
-					'OnnxRuntimeModule not available, running AR camera only.',
-				);
+			if (!SceneViewModule || typeof SceneViewModule.initializeScene !== 'function') {
+				throw new Error('SceneViewModule not available');
 			}
 
+			await SceneViewModule.initializeScene(reactTag);
+			await SceneViewModule.startARSession();
 			setIsInitialized(true);
+
 			onSceneReady?.();
 		} catch (err) {
-			console.error('AR Initialization error:', err);
-			onError(
-				err instanceof Error ? err.message : 'Failed to initialize AR scene',
-			);
+			console.error('❌ AR Initialization error:', err);
+			onError(err instanceof Error ? err.message : 'Failed to initialize AR scene');
+			Alert.alert('AR Initialization Failed', err.message || 'Unknown error', [
+				{ text: 'OK' },
+			]);
 		}
 	}, [isMounted, onError, onSceneReady, requestCameraPermission]);
 
-	// Frame processing
-	const processFrame = useCallback(async () => {
-		if (!isInitialized || isProcessing) return;
-		if (
-			!OnnxRuntimeModule ||
-			typeof OnnxRuntimeModule.runInferenceFromFrame !== 'function'
-		)
-			return;
+	const renderBlueBox = useCallback(async () => {
+		if (!isInitialized) return;
 
-		setIsProcessing(true);
 		try {
-			const frameData = await SceneViewModule.captureFrame();
-			if (!frameData) return;
-
-			const rawDetections = await OnnxRuntimeModule.runInferenceFromFrame(
-				frameData,
-			);
-
-			const processedDetections: BoundingBox[] = [];
-			if (rawDetections && Array.isArray(rawDetections)) {
-				for (const detection of rawDetections) {
-					if (detection.length >= 6 && detection[4] > 0.5) {
-						processedDetections.push({
-							x: detection[0] - detection[2] / 2,
-							y: detection[1] - detection[3] / 2,
-							width: detection[2],
-							height: detection[3],
-							confidence: detection[4],
-							class: detection[5],
-						});
-					}
-				}
-			}
-			setDetections(processedDetections);
+			const pose = {
+				position: [0.0, 0.0, -0.5], // อยู่หน้ากล้อง 0.5 เมตร
+				rotation: [0.0, 0.0, 0.0],
+			};
+			await SceneViewModule.renderBlueBox(pose);
 		} catch (err) {
-			console.error('Frame processing error:', err);
-		} finally {
-			setIsProcessing(false);
+			console.error('❌ Failed to render blue box:', err);
 		}
-	}, [isInitialized, isProcessing]);
+	}, [isInitialized]);
 
 	useEffect(() => {
 		if (!isMounted) return;
@@ -179,25 +122,19 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 	}, [isMounted, initializeScene]);
 
 	useEffect(() => {
-		if (!isInitialized || isModelReady === false) return; // ถ้า model ใช้ไม่ได้ skip
-		const intervalId = setInterval(processFrame, 100);
-		return () => clearInterval(intervalId);
-	}, [isInitialized, isModelReady, processFrame]);
+		if (isInitialized) {
+			renderBlueBox(); // render Blue Box เมื่อ AR ready
+		}
+	}, [isInitialized, renderBlueBox]);
 
-	const renderDetectionOverlays = () =>
-		detections.map((d, i) => (
-			<View
-				key={i}
-				style={[
-					arSceneView.boundingBox,
-					{ left: d.x, top: d.y, width: d.width, height: d.height },
-				]}
-			>
-				<Text style={arSceneView.confidenceText}>
-					{(d.confidence * 100).toFixed(1)}%
-				</Text>
-			</View>
-		));
+	useEffect(() => {
+		return () => {
+			console.log('🧹 Cleaning up AR Scene...');
+			if (isInitialized && SceneViewModule && SceneViewModule.cleanup) {
+				SceneViewModule.cleanup().catch(console.error);
+			}
+		};
+	}, [isInitialized]);
 
 	return (
 		<View style={[arSceneView.container, style]}>
@@ -207,29 +144,11 @@ const ARSceneView: React.FC<ARSceneViewProps> = ({
 				onLayout={handleViewLayout}
 				collapsable={false}
 			/>
-			<View style={arSceneView.overlayContainer}>
-				{renderDetectionOverlays()}
-			</View>
-			<View>
+
+			<View style={arSceneView.controlsContainer}>
 				<TouchableOpacity style={arSceneView.closeButton} onPress={onClose}>
-					<Text style={arSceneView.closeButtonText}>Close AR</Text>
+					<Text style={arSceneView.closeButtonText}>✕ Close</Text>
 				</TouchableOpacity>
-				<View style={arSceneView.statusContainer}>
-					<Text style={arSceneView.statusText}>
-						{isInitialized ? '✅ AR Active' : '⏳ Initializing...'}
-					</Text>
-					<Text style={arSceneView.statusText}>
-						Model:{' '}
-						{isModelReady === null
-							? '⏳ Loading...'
-							: isModelReady
-							? '✅ Active'
-							: '❌ Error'}
-					</Text>
-					<Text style={arSceneView.statusText}>
-						Detections: {detections.length}
-					</Text>
-				</View>
 			</View>
 		</View>
 	);

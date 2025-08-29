@@ -1,48 +1,98 @@
-import { Dimensions, StyleSheet } from "react-native";
-
-const { height: windowHeight } = Dimensions.get('window');
+import { StyleSheet } from "react-native";
 
 export const arSceneView = StyleSheet.create({
-	container: { flex: 1, backgroundColor: 'black' },
-	sceneView: { flex: 1 },
-	overlayContainer: {
-		position: 'absolute',
-		top: 0,
-		left: 0,
-		right: 0,
-		bottom: 0,
-	},
-	boundingBox: {
-		position: 'absolute',
-		borderWidth: 2,
-		borderColor: 'blue',
-		justifyContent: 'center',
-		alignItems: 'center',
-	},
-	confidenceText: {
-		color: 'white',
-		fontSize: 12,
-		backgroundColor: 'rgba(0,0,0,0.5)',
-		padding: 2,
-	},
-	// ปุ่ม Close AR
-	closeButton: {
-		position: 'absolute',
-		bottom: windowHeight * 0.15, // ขยับขึ้นจากขอบล่าง 100
-		left: '50%',
-		transform: [{ translateX: -50 }], // กึ่งกลางจอ
-		backgroundColor: 'red',
-		paddingHorizontal: 16,
-		paddingVertical: 8,
-		borderRadius: 8,
-	},
-	closeButtonText: { color: 'white', fontWeight: 'bold' },
-	// Status อยู่ล่างซ้าย ขยับขึ้น 10% ของจอ
-	statusContainer: {
-		position: 'absolute',
-		bottom: windowHeight * 0.2,
-		left: 10,
-		alignItems: 'flex-start',
-	},
-	statusText: { color: 'white' },
+  container: {
+    flex: 1,
+    backgroundColor: "black",
+  },
+  sceneView: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+  },
+  overlayContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    pointerEvents: "none",
+  },
+  boundingBox: {
+    position: "absolute",
+    borderWidth: 2,
+    borderColor: "#FF0000",
+    backgroundColor: "transparent",
+    justifyContent: "flex-start",
+    alignItems: "flex-start",
+  },
+  confidenceText: {
+    color: "#FF0000",
+    fontSize: 12,
+    fontWeight: "bold",
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    padding: 2,
+    borderRadius: 3,
+  },
+  statusContainer: {
+    position: "absolute",
+    top: 50,
+    left: 10,
+    right: 10,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    padding: 10,
+    borderRadius: 8,
+    pointerEvents: "none",
+  },
+  statusText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+    marginBottom: 2,
+  },
+  debugText: {
+    color: "#CCCCCC",
+    fontSize: 10,
+    fontFamily: "monospace",
+  },
+  controlsContainer: {
+    position: "absolute",
+    bottom: 50,
+    left: 20,
+    right: 20,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    alignItems: "center",
+  },
+  closeButton: {
+    backgroundColor: "rgba(255, 0, 0, 0.8)",
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 25,
+    elevation: 5,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  closeButtonText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  testButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  buttonText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
+  },
 });

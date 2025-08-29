@@ -1,3 +1,49 @@
+# Flow
+
+Activity -> ARSceneView -> onFrame() -> OnnxHandler(Session)
+    -> Run inference -> return box6 -> HitResult + offset -> Pose (position+rotation)
+    -> ARSceneView render red box
+
+## Onnx
+
+ARCore Frame(YUV_420_888) -> RGB -> Bitmap -> Resize Bitmap(320) -> to tensor -> Normalize -> tensor to Onnx
+
+ARApp/
+├── android/
+│   ├── app/
+│   │   └── src/main/
+│   │       ├── assets/
+│   │       │   ├── yolov11n_fp16.onnx
+│   │       │   ├── yolov11n_fp16.ort
+│   │       │   ├── yolov11n.onnx
+│   │       │   └── yolov11n.onnx
+│   │       ├── java/com/arapp/
+│   │       │   ├── MainActivity.kt
+│   │       │   ├── MainApplication.kt
+│   │       │   ├── modules/
+│   │       │   │   ├── ARSceneViewActivity.kt
+│   │       │   │   ├── ARSceneViewModule.kt
+│   │       │   │   └── ARSceneViewPackage.kt
+│   │       │   └── utils/
+│   │       │       ├── CoordinateMapper.kt
+│   │       │       └── OnnxRuntimeHandler.kt
+│   │       └── AndroidManifest.xml
+│   └── build.gradle
+├── assets/
+│   └── models/
+│       ├── yolov11n_fp16.onnx
+│       ├── yolov11n_fp16.ort
+│       ├── yolov11n.onnx
+│       └── yolov11n.ort
+├── src/
+│   ├── components/
+│   ├── screens/
+│   ├── styles/
+│   ├── utils/
+│   └── App.tsx
+
+---
+
 This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
 
 # Getting Started

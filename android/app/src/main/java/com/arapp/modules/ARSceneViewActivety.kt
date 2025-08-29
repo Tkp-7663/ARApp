@@ -1,8 +1,9 @@
-package com.example.arapp
+package com.arapp.modules
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import io.github.sceneview.ar.ARSceneView
+import com.arapp.modules.OnnxRuntimeHandler
 
 class ARActivity : ComponentActivity() {
 
@@ -11,16 +12,25 @@ class ARActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // สร้าง ARSceneView
+        // OnnxRuntimeHandler instance
+        val onnxHandler = OnnxRuntimeHandler(this)
+        // ARSceneViewModule instance
+        val sceneView = ARSceneViewModule(this)
+
+        // create ARSceneView
         arSceneView = ARSceneView(this).apply {
-
-            // Callback ดักจับ frame
+            // Callback capture frame
             onFrame = { frame ->
-                // แปลง frame เป็น Bitmap
-                val bitmap = frame.toBitmap()  // ฟังก์ชันแปลง frame -> Bitmap
+                // send frame to OnnxHandler
+                val tensor = onnxHandler.convertYUVToTensor(frame)
+                val output = onnxHandler.runOnnxInference(tensor)
 
-                // ส่ง bitmap ให้ ONNX inference
-                OnnxHandler.runInference(bitmap)
+                // render the onnx blue boxes
+                sceneView.renderOnnxBoxs(arSceneView, output)
+
+                // render the model red boxes
+                val pos6dof = sceneView.getPos6dof(output)
+                sceneView.renderModelBoxes(arSceneView, pos6dof)
             }
         }
 
@@ -29,16 +39,16 @@ class ARActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        arSceneView.resume()  // auto start AR session
+        arSceneView.resume()
     }
 
     override fun onPause() {
         super.onPause()
-        arSceneView.pause()   // pause AR session
+        arSceneView.pause()
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        arSceneView.destroy() // cleanup
+        arSceneView.destroy()
     }
 }

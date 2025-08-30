@@ -130,7 +130,7 @@ class OnnxRuntimeHandler(private val context: Context) {
         session.use { sess ->
             val result = sess.run(mapOf(sess.inputNames.iterator().next() to inputTensor))
             val output = result[0].value as Array<FloatArray>
-            return output[0] // สมมติว่า output เป็น [1, N]
+            return output[0]
 
             // val output = result[0].value
             // println("Output class = ${output::class.java}")

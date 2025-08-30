@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import io.github.sceneview.ar.ARSceneView
 import com.arapp.utils.OnnxRuntimeHandler
+import com.arapp.modules.ARRenderer
 
 class ARActivity : ComponentActivity() {
 
@@ -14,8 +15,8 @@ class ARActivity : ComponentActivity() {
 
         // OnnxRuntimeHandler instance
         val onnxHandler = OnnxRuntimeHandler(applicationContext)
-        // ARSceneViewModule instance
-        val sceneView = ARSceneViewModule(this)
+        // AR instance
+        val arRenderer = ARRenderer(this)
 
         // create ARSceneView
         arSceneView = ARSceneView(this).apply {
@@ -27,12 +28,12 @@ class ARActivity : ComponentActivity() {
                     // Run inference
                     val output = onnxHandler.runOnnxInference(tensor)
 
-                    // Render blue boxes จาก Onnx
-                    sceneView.renderOnnxBoxs(this, output)
+                    // Render blue boxes from Onnx
+                    arRenderer.renderOnnxBoundingBoxes(this, output)
 
                     // Render red boxes 3D model with position + rotation
-                    val pos6DoF = sceneView.getPos6DoF(output)
-                    sceneView.renderModelBoxes(this, pos6DoF)
+                    val pos3D = arRenderer.get3DPos(f, output)
+                    arRenderer.renderModelBoxes(this, pos3D)
                 }
             }
         }

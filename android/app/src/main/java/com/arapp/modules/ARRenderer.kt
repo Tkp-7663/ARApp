@@ -1,17 +1,18 @@
 package com.arapp.modules
 
 import com.google.ar.core.Frame
-import com.google.ar.core.Pose
 import android.graphics.Color
 import io.github.sceneview.ar.ARSceneView
+import io.github.sceneview.ar.arcore.distanceTo // ! data type
+import io.github.sceneview.math.*
+import io.github.sceneview.node.Node
+import io.github.sceneview.loaders.MaterialLoader
 import io.github.sceneview.collision.Quaternion
 import io.github.sceneview.collision.Vector3
-import io.github.sceneview.math.Float3
 import io.github.sceneview.math.Position
-import io.github.sceneview.math.Rotation
-import io.github.sceneview.math.colorOf
-import io.github.sceneview.math.toVector3
 import io.github.sceneview.node.PlaneNode
+import kotlin.collections.minus
+import io.github.sceneview.collision.*
 
 class ARRenderer {
 
@@ -21,73 +22,110 @@ class ARRenderer {
         val scale: Vector3 = Vector3(1f, 1f, 1f)
     )
 
-    // Render the onnx bounding boxes on screen (blue)
-    fun renderOnnxBoundingBoxes(sceneView: ARSceneView, detections: FloatArray) {
-        for (i in detections.indices step 6) {
-            val x = detections[i]
-            val y = detections[i + 1]
-            val w = detections[i + 2]
-            val h = detections[i + 3]
+    private val blueNodes = mutableListOf<Node>()
+    private val redNodes = mutableListOf<Node>()
 
-            // Convert 2D pixel position to 3D world position using screenToWorld
-            val worldPos = sceneView.screenToWorld(
-                x + w / 2f,       // center x
-                y + h / 2f,       // center y
-                1f                // distance from camera
-            )
+    // Update / reuse blue boxes
+    fun updateOnnxBoundingBoxes(sceneView: ARSceneView, detections: FloatArray, modelInputSize: Int = 320) {
+        // ซ่อน node เก่า
+        blueNodes.forEach { it.isVisible = false }
 
-			// create material instance - cheer blue 30%
-			val blueMaterial = arSceneView.materialLoader.createColorInstance(
-				Color.argb((0.3f * 255).toInt(), 0, 0, 255)
-			)
+        // ขนาดหน้าจอจริง
+        val screenWidth = sceneView.width.toFloat()
+        val screenHeight = sceneView.height.toFloat()
+        val scaleX = screenWidth / modelInputSize
+        val scaleY = screenHeight / modelInputSize
 
-            val boxNode = PlaneNode(
-                engine = arSceneView.engine,
-				size = Float3(w, h, 0f),
-				materialInstance = blueMaterial
-            ).apply {
-				position = Position(x, y, -1f)
-			}
-            sceneView.addChildNode(boxNode)
+        val step = 5
+        for (i in 0 until detections.size step step) {
+            val xCenter = detections[i] * scaleX
+            val yCenter = detections[i + 1] * scaleY
+            val w = detections[i + 2] * scaleX
+            val h = detections[i + 3] * scaleY
+            val confidence = detections[i + 4]
+
+            if (confidence < 0.3f) continue // filter low confidence
+
+            val x = xCenter - w / 2f
+            val y = yCenter - h / 2f
+
+            // ใช้ node เดิมถ้ามี หรือสร้างใหม่
+            val blueBoundingBox = blueNodes.getOrNull(i / step) ?: PlaneNode(
+                engine = sceneView.engine,
+                size = Float3(w, h, 0f), // ! data type
+                materialInstance = sceneView.materialLoader.createColorInstance(
+                    Color.argb((0.3f * 255).toInt(), 0, 0, 255)
+                )
+            ).also {
+                sceneView.addChildNode(it)
+                blueNodes.add(it)
+            }
+
+            // อัปเดตตำแหน่งและขนาดทุก frame
+            blueBoundingBox.position = Vector3(x + w / 2f, y + h / 2f, -1f) // Z คงที่เพื่อ overlay // ! data type
+            blueBoundingBox(size = Float3(w, h, 0f)) // ! data type
+            blueBoundingBox.isVisible = true
         }
     }
 
-    // Render the model boxes on the AR scene (red)
-    fun renderModelBoxes(sceneView: ARSceneView, pose3DList: List<Pose3D>) {
-		// create material instance - cheer red 30%
-		val redMaterial = arSceneView.materialLoader.createColorInstance(
-			Color.argb((0.3f * 255).toInt(), 255, 0, 0)
-		)
+    // Update / reuse red boxes
+    fun updateModelBoxes(sceneView: ARSceneView, pose3DList: List<Pose3D>, minDistance: Float = 0.2f) {
+        // ซ่อน node เก่า
+        redNodes.forEach { it.isVisible = false }
 
         for (pose in pose3DList) {
-            val modelNode = PlaneNode(
-				engine = sceneView.engine,
-				size = Float3(0.45f, 0.45f, 0f),
-				materialInstance = redMaterial
-            ).apply {
-				position = pose.position
-				rotation = pose.rotation
-				scale = pose.scale
-			}
-            sceneView.addChildNode(modelNode)
+            // หา node ที่ใกล้ที่สุด // ! distanceTo
+            val closestNode = redNodes.minByOrNull { it.worldPosition.distanceTo(pose.position) }
+
+            // ! distanceTo
+            if (closestNode != null && closestNode.worldPosition.distanceTo(pose.position) < minDistance) {
+                // Reuse node
+                closestNode.worldPosition = pose.position // ! data type
+                closestNode.worldRotation = pose.rotation // ! data type
+                closestNode.worldScale = pose.scale // ! data type
+                closestNode.isVisible = true
+            } else {
+                // สร้าง PlaneNode ใหม่
+                val newNode = PlaneNode(
+                    engine = sceneView.engine,
+                    size = Float(0.45f, 0.45f, 0f), // ! data type
+                    materialInstance = sceneView.materialLoader.createColorInstance(
+                        Color.argb((0.3f * 255).toInt(), 255, 0, 0)
+                    )
+                ).apply {
+                    worldPosition = pose.position // ! data type
+                    worldRotation = pose.rotation // ! data type
+                    worldScale = pose.scale // ! data type
+                    isVisible = true
+                }
+
+                sceneView.addChildNode(newNode)
+                redNodes.add(newNode)
+            }
         }
     }
 
-    // Get 3D position with hitTest (3 points
-    fun get3DPos(frame: Frame, detections: FloatArray): List<Pose3D> {
+    // Get 3D positions with hitTest (แก้ให้ตรง YOLOv11n)
+    fun get3DPos(frame: Frame, detections: FloatArray, confidenceThreshold: Float = 0.3f): List<Pose3D> {
         val poses = mutableListOf<Pose3D>()
 
-        for (i in detections.indices step 6) {
-            val x = detections[i]
-            val y = detections[i + 1]
+        val step = 5 // [x_center, y_center, w, h, confidence]
+        for (i in 0 until detections.size step step) {
+            val xCenter = detections[i]
+            val yCenter = detections[i + 1]
             val w = detections[i + 2]
             val h = detections[i + 3]
+            val confidence = detections[i + 4]
 
-            val centerX = x + w / 2f
-            val centerY = y + h / 2f
+            if (confidence < confidenceThreshold) continue
+
+            val centerX = xCenter
+            val centerY = yCenter
+
+            // ปรับ top และ right ตามสัดส่วน 30%
             val topX = centerX
-            val topY = y
-            val rightX = x + w
+            val topY = centerY - h * 0.3f
+            val rightX = centerX + w * 0.3f
             val rightY = centerY
 
             val hitsCenter = frame.hitTest(centerX, centerY)
@@ -96,41 +134,38 @@ class ARRenderer {
 
             if (hitsCenter.isEmpty() || hitsTop.isEmpty() || hitsRight.isEmpty()) continue
 
-            // Convert Pose -> Float3 -> Vector3
-            val p0 = Float3(hitsCenter[0].hitPose.tx(), hitsCenter[0].hitPose.ty(), hitsCenter[0].hitPose.tz()).toVector3()
-            val p1 = Float3(hitsTop[0].hitPose.tx(), hitsTop[0].hitPose.ty(), hitsTop[0].hitPose.tz()).toVector3()
-            val p2 = Float3(hitsRight[0].hitPose.tx(), hitsRight[0].hitPose.ty(), hitsRight[0].hitPose.tz()).toVector3()
+            val p0 = Vector3(
+                hitsCenter[0].hitPose.tx(),
+                hitsCenter[0].hitPose.ty(),
+                hitsCenter[0].hitPose.tz()
+            )
+            val p1 = Vector3(
+                hitsTop[0].hitPose.tx(),
+                hitsTop[0].hitPose.ty(),
+                hitsTop[0].hitPose.tz()
+            )
+            val p2 = Vector3(
+                hitsRight[0].hitPose.tx(),
+                hitsRight[0].hitPose.ty(),
+                hitsRight[0].hitPose.tz()
+            )
 
-            // Calculate axes
-            val forwardAxis = Vector3.normalized(Vector3.subtract(p1, p0))
-            val rightAxis = Vector3.normalized(Vector3.subtract(p2, p0))
-            val upAxis = Vector3.normalized(Vector3.cross(forwardAxis, rightAxis))
+            val forwardAxis = Vector3.subtract(p1, p0).normalized()
+            val rightAxis = Vector3.subtract(p2, p0).normalized()
+            val upAxis = Vector3.cross(forwardAxis, rightAxis).normalized()
 
-            val rotation = quaternionFromAxes(forwardAxis, upAxis, rightAxis)
+            val rotation = Quaternion.lookRotation(forwardAxis, upAxis)
             poses.add(Pose3D(position = p0, rotation = rotation))
         }
 
         return poses
     }
 
-    // Create Quaternion from 3 axes
-    private fun quaternionFromAxes(forward: Vector3, up: Vector3, right: Vector3): Quaternion {
-        val m00 = right.x;   val m01 = right.y;   val m02 = right.z
-        val m10 = up.x;      val m11 = up.y;      val m12 = up.z
-        val m20 = forward.x; val m21 = forward.y; val m22 = forward.z
-
-        val trace = m00 + m11 + m22
-        return if (trace > 0) {
-            val s = 0.5f / kotlin.math.sqrt((trace + 1.0).toDouble()).toFloat()
-            Quaternion(
-                (m21 - m12) * s,
-                (m02 - m20) * s,
-                (m10 - m01) * s,
-                0.25f / s
-            )
-        } else {
-            // fallback: return identity quaternion if trace <= 0
-            Quaternion.identity()
-        }
+    // Clear nodes
+    fun clearNodes(sceneView: ARSceneView) {
+        blueNodes.forEach { sceneView.removeChildNode(it) }
+        redNodes.forEach { sceneView.removeChildNode(it) }
+        blueNodes.clear()
+        redNodes.clear()
     }
 }

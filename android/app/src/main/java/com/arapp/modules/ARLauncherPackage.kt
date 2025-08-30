@@ -1,20 +1,16 @@
 package com.arapp.modules
 
-import android.content.Intent
+import com.facebook.react.ReactPackage
+import com.facebook.react.bridge.NativeModule
 import com.facebook.react.bridge.ReactApplicationContext
-import com.facebook.react.bridge.ReactContextBaseJavaModule
-import com.facebook.react.bridge.ReactMethod
+import com.facebook.react.uimanager.ViewManager
 
-class ARLauncherModule(reactContext: ReactApplicationContext) :
-    ReactContextBaseJavaModule(reactContext) {
+class ARLauncherPackage : ReactPackage {
+    override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
+        return listOf(ARLauncherModule(reactContext))
+    }
 
-    override fun getName() = "ARLauncher"
-
-    @ReactMethod
-    fun openARActivity() {
-        currentActivity?.let {
-            val intent = Intent(it, ARActivity::class.java)
-            it.startActivity(intent)
-        }
+    override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {
+        return emptyList()
     }
 }

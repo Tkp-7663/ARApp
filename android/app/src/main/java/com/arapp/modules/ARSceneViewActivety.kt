@@ -1,57 +1,95 @@
 package com.arapp.modules
 
 import android.os.Bundle
+import android.view.Gravity
+import android.widget.Button
+import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import io.github.sceneview.ar.ARSceneView
 import com.arapp.utils.OnnxRuntimeHandler
-import com.arapp.modules.ARRenderer
+import com.google.ar.core.Frame
+import com.google.ar.core.Session
 
 class ARActivity : ComponentActivity() {
 
     private lateinit var arSceneView: ARSceneView
+    private lateinit var arRenderer: ARRenderer
+    private var modelRendered = false
+    private var modelPos3D: List<ARRenderer.Pose3D> = emptyList() 
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // OnnxRuntimeHandler instance
         val onnxHandler = OnnxRuntimeHandler(applicationContext)
-        // AR instance
-        val arRenderer = ARRenderer(this)
+        arRenderer = ARRenderer()
 
-        // create ARSceneView
+        // Root layout
+        val rootLayout = FrameLayout(this)
+
+        val session = Session(this)
+
+        // ARSceneView
         arSceneView = ARSceneView(this).apply {
-            // Callback capture frame
-            onFrame = { frame ->
-                frame?.let { f ->
-                    // Convert frame เป็น tensor
-                    val tensor = onnxHandler.convertYUVToTensor(f)
-                    // Run inference
-                    val output = onnxHandler.runOnnxInference(tensor)
+            onFrame = { frameTimeNanos: Long ->
+                val frame: Frame = session.update()
+                val tensor = onnxHandler.convertYUVToTensor(frame)
+                val output = onnxHandler.runOnnxInference(tensor)
 
-                    // Render blue boxes from Onnx
-                    arRenderer.renderOnnxBoundingBoxes(this, output)
+                // Update blue boxes every frame
+                arRenderer.updateOnnxBoundingBoxes(this, output)
 
-                    // Render red boxes 3D model with position + rotation
-                    val pos3D = arRenderer.get3DPos(f, output)
-                    arRenderer.renderModelBoxes(this, pos3D)
+                // Render red model boxes (only once)
+                if (!modelRendered) {
+                    val pos3D = arRenderer.get3DPos(frame, output)
+                    if (pos3D.isNotEmpty()) {
+                        modelPos3D = pos3D
+                        arRenderer.updateModelBoxes(this, modelPos3D)
+                        modelRendered = true
+                    }
                 }
             }
         }
 
-        setContentView(arSceneView)
+        // Add ARSceneView to root
+        rootLayout.addView(arSceneView, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT
+        ))
+
+        // Overlay Button
+        val backButton = Button(this).apply {
+            text = "Back to Home"
+            setOnClickListener { finish() } // กลับไปหน้า Home
+        }
+
+        // Position button 20% จากขอบล่าง
+        val buttonParams = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = Gravity.CENTER_HORIZONTAL or Gravity.BOTTOM
+            val marginBottom = (resources.displayMetrics.heightPixels * 0.2f).toInt()
+            setMargins(0, 0, 0, marginBottom)
+        }
+
+        rootLayout.addView(backButton, buttonParams)
+
+        setContentView(rootLayout)
     }
 
     override fun onStart() {
         super.onStart()
-        arSceneView.resume()
+        arSceneView.arCore.resume(this, this)
     }
 
     override fun onStop() {
-        arSceneView.pause()
+        arSceneView.arCore.pause()
         super.onStop()
     }
 
     override fun onDestroy() {
+        // Clear all nodes
+        arRenderer.clearNodes(arSceneView)
         arSceneView.destroy()
         super.onDestroy()
     }

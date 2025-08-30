@@ -1,69 +1,26 @@
-import React, { useState } from 'react';
-import {
-	View,
-	Text,
-	TouchableOpacity,
-	Alert,
-	PermissionsAndroid,
-	Platform,
-} from 'react-native';
-import ARSceneView from '../components/ARSceneView';
-import { homeScreen } from '../styles/screenStyles';
+import React, { useCallback } from 'react';
+import { View, Text, TouchableOpacity, NativeModules } from 'react-native';
+import { homeStyles } from '../styles/screenStyles';
 
-const HomeScreen = () => {
-	const [isARActive, setIsARActive] = useState(false);
+const { ARLauncher } = NativeModules;
 
-	const requestCameraPermission = async () => {
-		if (Platform.OS === 'android') {
-			try {
-				const granted = await PermissionsAndroid.request(
-					PermissionsAndroid.PERMISSIONS.CAMERA,
-					{
-						title: 'Camera Permission',
-						message: 'This app needs camera permission for AR functionality',
-						buttonNeutral: 'Ask Me Later',
-						buttonNegative: 'Cancel',
-						buttonPositive: 'OK',
-					},
-				);
-				return granted === PermissionsAndroid.RESULTS.GRANTED;
-			} catch (err) {
-				console.warn(err);
-				return false;
+const HomeScreen: React.FC = () => {
+	const openAR = useCallback(async () => {
+		try {
+			if (!ARLauncher || typeof ARLauncher.openARActivity !== 'function') {
+				throw new Error('ARLauncher native module not available');
 			}
+			await ARLauncher.openARActivity();
+		} catch (err) {
+			console.error('❌ Failed to open AR Activity:', err);
 		}
-		return true;
-	};
-
-	const handleStartAR = async () => {
-		const hasPermission = await requestCameraPermission();
-		if (!hasPermission) {
-			Alert.alert('Error', 'Camera permission is required for AR');
-			return;
-		}
-		setIsARActive(true);
-	};
-
-	const handleStopAR = () => setIsARActive(false);
-
-	if (isARActive) {
-		return (
-			<ARSceneView
-				onClose={handleStopAR}
-				onError={error => {
-					Alert.alert('AR Error', error);
-					setIsARActive(false);
-				}}
-			/>
-		);
-	}
+	}, []);
 
 	return (
-		<View style={homeScreen.container}>
-			<Text style={homeScreen.title}>AR Alloy Wheel Detection</Text>
-			<Text style={homeScreen.subtitle}>Demo on Samsung Galaxy S23 Ultra</Text>
-			<TouchableOpacity style={homeScreen.startButton} onPress={handleStartAR}>
-				<Text style={homeScreen.buttonText}>Start AR Detection</Text>
+		<View style={homeStyles.container}>
+			<Text style={homeStyles.label}>Demo App Test บน S23 Ultra</Text>
+			<TouchableOpacity style={homeStyles.button} onPress={openAR}>
+				<Text style={homeStyles.buttonText}>Open AR Scene</Text>
 			</TouchableOpacity>
 		</View>
 	);

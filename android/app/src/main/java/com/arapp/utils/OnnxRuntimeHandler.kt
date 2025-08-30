@@ -7,11 +7,12 @@ import android.media.Image
 import ai.onnxruntime.*
 import java.io.File
 import java.io.FileOutputStream
+import com.google.ar.core.Frame
 
 class OnnxRuntimeHandler(private val context: Context) {
 
     companion object {
-        const val MODEL = "yolov11n_fp16.onnx"
+        const val MODEL = "yolov11n.onnx"
         const val INPUT_SIZE = 320
     }
 
@@ -32,25 +33,30 @@ class OnnxRuntimeHandler(private val context: Context) {
     }
 
     // ARCore Frame -> FloatArray Tensor
-    fun convertYUVToTensor(frame: Image): FloatArray {
-        val rgb = convertYUVToRGB(frame)
-        val bitmap = convertRGBToBitmap(rgb, frame.width, frame.height)
-        val resized = resizeBitmap(bitmap, INPUT_SIZE, INPUT_SIZE)
-        val tensor = convertBitmapToTensor(resized)
-        return normalizeTensor(tensor)
+    fun convertYUVToTensor(frame: Frame): FloatArray {
+        val image = frame.acquireCameraImage()
+        try {
+            val rgb = convertYUVToRGB(image)
+            val bitmap = convertRGBToBitmap(rgb, image.width, image.height)
+            val resized = resizeBitmap(bitmap, INPUT_SIZE, INPUT_SIZE)
+            val tensor = convertBitmapToTensor(resized)
+            return normalizeTensor(tensor)
+        } finally {
+            image.close() // ป้องกัน memory leak
+        }
     }
 
     // YUV_420_888 -> RGB
-    private fun convertYUVToRGB(frame: Image): IntArray {
-        val width = frame.width
-        val height = frame.height
-        val yBuffer = frame.planes[0].buffer
-        val uBuffer = frame.planes[1].buffer
-        val vBuffer = frame.planes[2].buffer
+    private fun convertYUVToRGB(image: Image): IntArray {
+        val width = image.width
+        val height = image.height
+        val yBuffer = image.planes[0].buffer
+        val uBuffer = image.planes[1].buffer
+        val vBuffer = image.planes[2].buffer
 
-        val yRowStride = frame.planes[0].rowStride
-        val uvRowStride = frame.planes[1].rowStride
-        val uvPixelStride = frame.planes[1].pixelStride
+        val yRowStride = image.planes[0].rowStride
+        val uvRowStride = image.planes[1].rowStride
+        val uvPixelStride = image.planes[1].pixelStride
 
         val rgbArray = IntArray(width * height)
 
@@ -108,9 +114,9 @@ class OnnxRuntimeHandler(private val context: Context) {
         for (y in 0 until height) {
             for (x in 0 until width) {
                 val pixel = bitmap.getPixel(x, y)
-                floatArray[idx] = (Color.red(pixel).toFloat())
-                floatArray[idx + width * height] = (Color.green(pixel).toFloat())
-                floatArray[idx + 2 * width * height] = (Color.blue(pixel).toFloat())
+                floatArray[idx] = Color.red(pixel).toFloat()
+                floatArray[idx + width * height] = Color.green(pixel).toFloat()
+                floatArray[idx + 2 * width * height] = Color.blue(pixel).toFloat()
                 idx++
             }
         }
@@ -125,17 +131,20 @@ class OnnxRuntimeHandler(private val context: Context) {
     // Run inference with ONNX Runtime
     fun runOnnxInference(tensor: FloatArray): FloatArray {
         val shape = longArrayOf(1, 3, INPUT_SIZE.toLong(), INPUT_SIZE.toLong())
-        val inputTensor = OnnxTensor.createTensor(env, tensor, shape)
+
+        // แปลง FloatArray เป็น FloatBuffer
+        val floatBuffer = java.nio.FloatBuffer.wrap(tensor)
+
+        // สร้าง OnnxTensor ใช้ env ไม่ต้องสร้าง allocator
+        val inputTensor = OnnxTensor.createTensor(env, floatBuffer, shape)
 
         session.use { sess ->
-            val result = sess.run(mapOf(sess.inputNames.iterator().next() to inputTensor))
-            val output = result[0].value as Array<FloatArray>
-            return output[0]
+            val result = sess.run(mapOf("images" to inputTensor))
+            val output = result[0].value
 
-            // val output = result[0].value
-            // println("Output class = ${output::class.java}")
-            // println("Output value = ${output}")
-
+            // output เป็น Array<FloatArray> หรือ Array<Array<Float>> ตาม model
+            @Suppress("UNCHECKED_CAST")
+            return output as FloatArray
         }
     }
 }

@@ -123,7 +123,8 @@ dependencies {
     }
 
     // Native Modules
-    implementation("com.google.ar:core:1.42.0")
+    implementation("com.google.ar:core:1.48.0")
+    implementation("dev.romainguy:kotlin-math:1.6.0")
     implementation("io.github.sceneview:arsceneview:2.3.0")
     implementation("io.github.sceneview:sceneview:2.3.0")
     // implementation("com.microsoft.onnxruntime:onnxruntime-mobile:1.18.0")

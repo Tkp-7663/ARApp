@@ -41,6 +41,11 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
+      <activity
+        android:name="com.arapp.modules.ARSceneViewActivity"
+        android:exported="false"
+        android:theme="@style/Theme.AppCompat.Light.NoActionBar">
+      </activity>
 
       <meta-data android:name="com.google.ar.core" android:value="required" tools:replace="android:value"/>
     </application>

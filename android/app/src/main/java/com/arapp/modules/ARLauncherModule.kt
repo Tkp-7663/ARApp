@@ -16,7 +16,8 @@ class ARLauncherModule(reactContext: ReactApplicationContext) :
         val activity = currentActivity
         if (activity != null) {
             try {
-                val intent = Intent(activity, ARActivity::class.java)
+                val intent = Intent(activity, ARSceneViewActivity::class.java)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 activity.startActivity(intent)
                 promise.resolve(true)
             } catch (e: Exception) {

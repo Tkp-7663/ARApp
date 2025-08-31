@@ -10,7 +10,7 @@ import com.arapp.utils.OnnxRuntimeHandler
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 
-class ARActivity : ComponentActivity() {
+class ARSceneViewActivity : ComponentActivity() {
 
     private lateinit var arSceneView: ARSceneView
     private lateinit var arRenderer: ARRenderer

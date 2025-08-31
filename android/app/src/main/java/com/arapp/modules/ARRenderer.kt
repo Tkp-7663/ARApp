@@ -13,59 +13,21 @@ import io.github.sceneview.math.Position
 import io.github.sceneview.node.PlaneNode
 import kotlin.collections.minus
 import io.github.sceneview.collision.*
+import dev.romainguy.kotlin.math.Float3
 
 class ARRenderer {
 
     data class Pose3D(
-        val position: Vector3,
-        val rotation: Quaternion,
-        val scale: Vector3 = Vector3(1f, 1f, 1f)
+        val position: Float3,
+        val rotation: Float3,
+        val scale: Float3 = Float3(1f, 1f, 1f)
     )
 
     private val blueNodes = mutableListOf<Node>()
     private val redNodes = mutableListOf<Node>()
 
     // Update / reuse blue boxes
-    fun updateOnnxBoundingBoxes(sceneView: ARSceneView, detections: FloatArray, modelInputSize: Int = 320) {
-        // ซ่อน node เก่า
-        blueNodes.forEach { it.isVisible = false }
-
-        // ขนาดหน้าจอจริง
-        val screenWidth = sceneView.width.toFloat()
-        val screenHeight = sceneView.height.toFloat()
-        val scaleX = screenWidth / modelInputSize
-        val scaleY = screenHeight / modelInputSize
-
-        val step = 5
-        for (i in 0 until detections.size step step) {
-            val xCenter = detections[i] * scaleX
-            val yCenter = detections[i + 1] * scaleY
-            val w = detections[i + 2] * scaleX
-            val h = detections[i + 3] * scaleY
-            val confidence = detections[i + 4]
-
-            if (confidence < 0.3f) continue // filter low confidence
-
-            val x = xCenter - w / 2f
-            val y = yCenter - h / 2f
-
-            // ใช้ node เดิมถ้ามี หรือสร้างใหม่
-            val blueBoundingBox = blueNodes.getOrNull(i / step) ?: PlaneNode(
-                engine = sceneView.engine,
-                size = Float3(w, h, 0f), // ! data type
-                materialInstance = sceneView.materialLoader.createColorInstance(
-                    Color.argb((0.3f * 255).toInt(), 0, 0, 255)
-                )
-            ).also {
-                sceneView.addChildNode(it)
-                blueNodes.add(it)
-            }
-
-            // อัปเดตตำแหน่งและขนาดทุก frame
-            blueBoundingBox.position = Vector3(x + w / 2f, y + h / 2f, -1f) // Z คงที่เพื่อ overlay // ! data type
-            blueBoundingBox(size = Float3(w, h, 0f)) // ! data type
-            blueBoundingBox.isVisible = true
-        }
+    fun updateOnnxBoundingBoxes(sceneView: ARSceneView, detections: FloatArray) {
     }
 
     // Update / reuse red boxes
@@ -80,22 +42,22 @@ class ARRenderer {
             // ! distanceTo
             if (closestNode != null && closestNode.worldPosition.distanceTo(pose.position) < minDistance) {
                 // Reuse node
-                closestNode.worldPosition = pose.position // ! data type
-                closestNode.worldRotation = pose.rotation // ! data type
-                closestNode.worldScale = pose.scale // ! data type
+                closestNode.worldPosition = pose.position
+                closestNode.worldRotation = pose.rotation
+                closestNode.worldScale = pose.scale
                 closestNode.isVisible = true
             } else {
                 // สร้าง PlaneNode ใหม่
                 val newNode = PlaneNode(
                     engine = sceneView.engine,
-                    size = Float(0.45f, 0.45f, 0f), // ! data type
+                    size = Float3(0.45f, 0.45f, 0f),
                     materialInstance = sceneView.materialLoader.createColorInstance(
                         Color.argb((0.3f * 255).toInt(), 255, 0, 0)
                     )
                 ).apply {
-                    worldPosition = pose.position // ! data type
-                    worldRotation = pose.rotation // ! data type
-                    worldScale = pose.scale // ! data type
+                    worldPosition = pose.position
+                    worldRotation = pose.rotation
+                    worldScale = pose.scale
                     isVisible = true
                 }
 
@@ -155,7 +117,7 @@ class ARRenderer {
             val upAxis = Vector3.cross(forwardAxis, rightAxis).normalized()
 
             val rotation = Quaternion.lookRotation(forwardAxis, upAxis)
-            poses.add(Pose3D(position = p0, rotation = rotation))
+            poses.add(Pose3D(position = p0.toFloat3(), rotation = rotation.getEulerAngles().toFloat3()))
         }
 
         return poses

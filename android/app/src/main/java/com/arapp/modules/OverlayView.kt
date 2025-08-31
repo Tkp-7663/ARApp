@@ -7,11 +7,25 @@ import android.graphics.Paint
 import android.view.View
 import io.github.sceneview.ar.ARSceneView
 
+data class Detection(
+    val xCenter: Float,
+    val yCenter: Float,
+    val width: Float,
+    val height: Float,
+    val confidence: Float
+)
+
 class OverlayView(context: Context, private val sceneView: ARSceneView) : View(context) {
 
-    var detections: FloatArray = floatArrayOf()
+    var detections: List<Detection> = emptyList()
     var modelInputSize: Int = 320
     var confidenceThreshold: Float = 0.5f
+
+    private val paint = Paint().apply {
+        color = Color.BLUE
+        style = Paint.Style.STROKE
+        strokeWidth = 4f
+    }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
@@ -19,31 +33,16 @@ class OverlayView(context: Context, private val sceneView: ARSceneView) : View(c
     }
 
     private fun drawBoundingBoxes(canvas: Canvas) {
-        val paint = Paint().apply {
-            color = Color.BLUE
-            style = Paint.Style.STROKE
-            strokeWidth = 4f
-        }
+        val scaleX = width.toFloat() / modelInputSize
+        val scaleY = height.toFloat() / modelInputSize
 
-        val screenWidth = width.toFloat()
-        val screenHeight = height.toFloat()
-        val scaleX = screenWidth / modelInputSize
-        val scaleY = screenHeight / modelInputSize
+        detections.forEach { det ->
+            if (det.confidence < confidenceThreshold) return@forEach
 
-        val step = 5
-        for (i in 0 until detections.size step step) {
-            val xCenter = detections[i] * scaleX
-            val yCenter = detections[i + 1] * scaleY
-            val wPixel = detections[i + 2] * scaleX
-            val hPixel = detections[i + 3] * scaleY
-            val confidence = detections[i + 4]
-
-            if (confidence < confidenceThreshold) continue
-
-            val left = xCenter - wPixel / 2f
-            val top = yCenter - hPixel / 2f
-            val right = xCenter + wPixel / 2f
-            val bottom = yCenter + hPixel / 2f
+            val left = (det.xCenter - det.width / 2f) * scaleX
+            val top = (det.yCenter - det.height / 2f) * scaleY
+            val right = (det.xCenter + det.width / 2f) * scaleX
+            val bottom = (det.yCenter + det.height / 2f) * scaleY
 
             canvas.drawRect(left, top, right, bottom, paint)
         }

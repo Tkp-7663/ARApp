@@ -8,9 +8,11 @@ import io.github.sceneview.node.Node
 import io.github.sceneview.collision.Quaternion
 import io.github.sceneview.collision.Vector3
 import io.github.sceneview.math.Position
+import io.github.sceneview.math.toFloat3
 import io.github.sceneview.node.PlaneNode
 import dev.romainguy.kotlin.math.Float3
 import kotlin.math.sqrt
+
 
 class ARRenderer {
 
@@ -67,59 +69,51 @@ class ARRenderer {
     }
 
     // Get 3D positions with hitTest (แก้ให้ตรง YOLOv11n)
-    fun get3DPos(frame: Frame, detections: FloatArray, confidenceThreshold: Float = 0.3f): List<Pose3D> {
+    fun get3DPos(frame: Frame, detections: List<Detection>, confidenceThreshold: Float = 0.3f): List<Pose3D> {
         val poses = mutableListOf<Pose3D>()
 
-        val step = 5 // [x_center, y_center, w, h, confidence]
-        for (i in 0 until detections.size step step) {
-            val xCenter = detections[i]
-            val yCenter = detections[i + 1]
-            val w = detections[i + 2]
-            val h = detections[i + 3]
-            val confidence = detections[i + 4]
+        detections.forEach { det ->
+            if (det.confidence < confidenceThreshold) return@forEach
 
-            if (confidence < confidenceThreshold) continue
+            val centerX = det.xCenter
+            val centerY = det.yCenter
 
-            val centerX = xCenter
-            val centerY = yCenter
-
-            // ปรับ top และ right ตามสัดส่วน 30%
+            // ปรับ top และ right ตามสัดส่วน 10%
             val topX = centerX
-            val topY = centerY - h * 0.3f
-            val rightX = centerX + w * 0.3f
+            val topY = centerY - det.height * 0.1f
+            val rightX = centerX + det.width * 0.1f
             val rightY = centerY
 
             val hitsCenter = frame.hitTest(centerX, centerY)
             val hitsTop = frame.hitTest(topX, topY)
             val hitsRight = frame.hitTest(rightX, rightY)
 
-            if (hitsCenter.isEmpty() || hitsTop.isEmpty() || hitsRight.isEmpty()) continue
+            if (hitsCenter.isEmpty() || hitsTop.isEmpty() || hitsRight.isEmpty()) return@forEach
 
-            val p0 = Vector3(
-                hitsCenter[0].hitPose.tx(),
-                hitsCenter[0].hitPose.ty(),
-                hitsCenter[0].hitPose.tz()
-            )
-            val p1 = Vector3(
-                hitsTop[0].hitPose.tx(),
-                hitsTop[0].hitPose.ty(),
-                hitsTop[0].hitPose.tz()
-            )
-            val p2 = Vector3(
-                hitsRight[0].hitPose.tx(),
-                hitsRight[0].hitPose.ty(),
-                hitsRight[0].hitPose.tz()
-            )
+            val p0 = hitsCenter[0].hitPose.toVector3()
+            val p1 = hitsTop[0].hitPose.toVector3()
+            val p2 = hitsRight[0].hitPose.toVector3()
 
+            // คำนวณแกน
             val forwardAxis = Vector3.subtract(p1, p0).normalized()
             val rightAxis = Vector3.subtract(p2, p0).normalized()
             val upAxis = Vector3.cross(forwardAxis, rightAxis).normalized()
 
+            // สร้าง Quaternion จากแกน
             val rotation = Quaternion.lookRotation(forwardAxis, upAxis)
-            poses.add(Pose3D(position = p0.toFloat3(), rotation = rotation.getEulerAngles().toFloat3()))
+
+            // ใช้ Quaternion โดยตรง (ถ้า Pose3D ต้องการ Euler ให้แปลง)
+            poses.add(Pose3D(
+                position = p0.toFloat3(),
+                rotation = rotation.getEulerAngles().toFloat3()
+            ))
         }
 
         return poses
+    }
+
+    private fun com.google.ar.core.Pose.toVector3(): Vector3 {
+        return Vector3(tx(), ty(), tz())
     }
 
     // Clear nodes

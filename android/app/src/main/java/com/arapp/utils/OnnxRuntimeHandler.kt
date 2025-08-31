@@ -8,6 +8,8 @@ import ai.onnxruntime.*
 import java.io.File
 import java.io.FileOutputStream
 import com.google.ar.core.Frame
+import java.nio.FloatBuffer
+import android.util.Log
 
 class OnnxRuntimeHandler(private val context: Context) {
 
@@ -128,23 +130,54 @@ class OnnxRuntimeHandler(private val context: Context) {
         return tensor.map { it / 255f }.toFloatArray()
     }
 
+    data class Detection(
+        val x: Float,
+        val y: Float,
+        val w: Float,
+        val h: Float,
+        val confidence: Float
+    )
+
     // Run inference with ONNX Runtime
-    fun runOnnxInference(tensor: FloatArray): FloatArray {
+    fun runOnnxInference(tensor: FloatArray): List<Detection> {
         val shape = longArrayOf(1, 3, INPUT_SIZE.toLong(), INPUT_SIZE.toLong())
-
-        // แปลง FloatArray เป็น FloatBuffer
         val floatBuffer = java.nio.FloatBuffer.wrap(tensor)
-
-        // สร้าง OnnxTensor ใช้ env ไม่ต้องสร้าง allocator
         val inputTensor = OnnxTensor.createTensor(env, floatBuffer, shape)
 
-        session.use { sess ->
-            val result = sess.run(mapOf("images" to inputTensor))
-            val output = result[0].value
+        val result = session.run(mapOf("images" to inputTensor))
+        val output = result[0].value
 
-            // output เป็น Array<FloatArray> หรือ Array<Array<Float>> ตาม model
-            @Suppress("UNCHECKED_CAST")
-            return output as FloatArray
+        if (output is Array<*>) {
+            // output = [[[...]]]  shape (1,5,2100)
+            val arr = output as Array<Array<FloatArray>>
+            val detections = mutableListOf<Detection>()
+            val boxes = arr[0]   // shape (5,2100)
+
+            for (i in 0 until boxes[0].size) {
+                val x = boxes[0][i]
+                val y = boxes[1][i]
+                val w = boxes[2][i]
+                val h = boxes[3][i]
+                val conf = boxes[4][i]
+
+                if (conf > 0.25f) { // threshold
+                    detections.add(Detection(x, y, w, h, conf))
+                }
+            }
+            return detections
+        } else {
+            throw IllegalArgumentException("Unexpected output type: ${output!!::class}")
+        }
+    }
+
+    // ปิด resource เมื่อ Activity/Service ถูกทำลาย
+    fun close() {
+        try {
+            session.close()
+            env.close()
+            Log.d("OnnxRuntimeHandler", "ONNX resources closed")
+        } catch (e: Exception) {
+            Log.e("OnnxRuntimeHandler", "Error closing resources", e)
         }
     }
 }

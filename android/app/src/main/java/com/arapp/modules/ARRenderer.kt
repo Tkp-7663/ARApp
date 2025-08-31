@@ -3,17 +3,14 @@ package com.arapp.modules
 import com.google.ar.core.Frame
 import android.graphics.Color
 import io.github.sceneview.ar.ARSceneView
-import io.github.sceneview.ar.arcore.distanceTo // ! data type
 import io.github.sceneview.math.*
 import io.github.sceneview.node.Node
-import io.github.sceneview.loaders.MaterialLoader
 import io.github.sceneview.collision.Quaternion
 import io.github.sceneview.collision.Vector3
 import io.github.sceneview.math.Position
 import io.github.sceneview.node.PlaneNode
-import kotlin.collections.minus
-import io.github.sceneview.collision.*
 import dev.romainguy.kotlin.math.Float3
+import kotlin.math.sqrt
 
 class ARRenderer {
 
@@ -26,25 +23,20 @@ class ARRenderer {
     private val blueNodes = mutableListOf<Node>()
     private val redNodes = mutableListOf<Node>()
 
-    // Update / reuse blue boxes
-    fun updateOnnxBoundingBoxes(sceneView: ARSceneView, detections: FloatArray) {
-    }
-
     // Update / reuse red boxes
-    fun updateModelBoxes(sceneView: ARSceneView, pose3DList: List<Pose3D>, minDistance: Float = 0.2f) {
+    fun renderModelBoxes(sceneView: ARSceneView, pose3DList: List<Pose3D>, minDistance: Float = 0.25f) {
         // ซ่อน node เก่า
         redNodes.forEach { it.isVisible = false }
 
         for (pose in pose3DList) {
-            // หา node ที่ใกล้ที่สุด // ! distanceTo
-            val closestNode = redNodes.minByOrNull { it.worldPosition.distanceTo(pose.position) }
+            // หา node ที่ใกล้ที่สุด
+            val closestNode = redNodes.minByOrNull { distance(it.position, pose.position) }
 
-            // ! distanceTo
-            if (closestNode != null && closestNode.worldPosition.distanceTo(pose.position) < minDistance) {
+            if (closestNode != null && distance(closestNode.position, pose.position) < minDistance) {
                 // Reuse node
-                closestNode.worldPosition = pose.position
-                closestNode.worldRotation = pose.rotation
-                closestNode.worldScale = pose.scale
+                closestNode.position = pose.position
+                closestNode.rotation = pose.rotation
+                closestNode.scale = pose.scale
                 closestNode.isVisible = true
             } else {
                 // สร้าง PlaneNode ใหม่
@@ -55,9 +47,9 @@ class ARRenderer {
                         Color.argb((0.3f * 255).toInt(), 255, 0, 0)
                     )
                 ).apply {
-                    worldPosition = pose.position
-                    worldRotation = pose.rotation
-                    worldScale = pose.scale
+                    position = pose.position
+                    rotation = pose.rotation
+                    scale = pose.scale
                     isVisible = true
                 }
 
@@ -65,6 +57,13 @@ class ARRenderer {
                 redNodes.add(newNode)
             }
         }
+    }
+
+    private fun distance(p1: Float3, p2: Float3): Float {
+        val dx = p1.x - p2.x
+        val dy = p1.y - p2.y
+        val dz = p1.z - p2.z
+        return sqrt(dx * dx + dy * dy + dz * dz)
     }
 
     // Get 3D positions with hitTest (แก้ให้ตรง YOLOv11n)

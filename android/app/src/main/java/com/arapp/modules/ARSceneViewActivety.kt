@@ -4,23 +4,29 @@ import android.os.Bundle
 import android.view.Gravity
 import android.widget.Button
 import android.widget.FrameLayout
+import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Paint
+import android.view.View
 import androidx.activity.ComponentActivity
 import io.github.sceneview.ar.ARSceneView
 import com.arapp.utils.OnnxRuntimeHandler
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 
+
 class ARSceneViewActivity : ComponentActivity() {
 
     private lateinit var arSceneView: ARSceneView
     private lateinit var arRenderer: ARRenderer
-    private var modelRendered = false
-    private var modelPos3D: List<ARRenderer.Pose3D> = emptyList() 
+    private lateinit var onnxHandler: OnnxRuntimeHandler
+    private lateinit var overlayView: OverlayView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val onnxHandler = OnnxRuntimeHandler(applicationContext)
+        onnxHandler = OnnxRuntimeHandler(applicationContext)
         arRenderer = ARRenderer()
 
         // Root layout
@@ -35,26 +41,36 @@ class ARSceneViewActivity : ComponentActivity() {
                 val tensor = onnxHandler.convertYUVToTensor(frame)
                 val output = onnxHandler.runOnnxInference(tensor)
 
-                // Update blue boxes every frame
-                arRenderer.updateOnnxBoundingBoxes(this, output)
+                // Overlay blue rectangles every frame
+                overlayView.detections = output
+                overlayView.invalidate()
 
                 // Render red model boxes (only once)
-                if (!modelRendered) {
-                    val pos3D = arRenderer.get3DPos(frame, output)
-                    if (pos3D.isNotEmpty()) {
-                        modelPos3D = pos3D
-                        arRenderer.updateModelBoxes(this, modelPos3D)
-                        modelRendered = true
-                    }
+                val pos3D = arRenderer.get3DPos(frame, output)
+                if (pos3D.isNotEmpty()) {
+                    arRenderer.renderModelBoxes(this, pos3D)
                 }
             }
         }
 
         // Add ARSceneView to root
-        rootLayout.addView(arSceneView, FrameLayout.LayoutParams(
-            FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT
-        ))
+        rootLayout.addView(
+            arSceneView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
+
+        // Add OverlayView to root
+        overlayView = OverlayView(this, arSceneView)
+        rootLayout.addView(
+            overlayView,
+            FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        )
 
         // Overlay Button
         val backButton = Button(this).apply {
@@ -89,7 +105,7 @@ class ARSceneViewActivity : ComponentActivity() {
 
     override fun onDestroy() {
         // Clear all nodes
-        arRenderer.clearNodes(arSceneView)
+        // arRenderer.clearNodes(arSceneView)
         arSceneView.destroy()
         super.onDestroy()
     }

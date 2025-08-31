@@ -15,6 +15,12 @@ import com.arapp.utils.OnnxRuntimeHandler
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 
 class ARSceneViewActivity : ComponentActivity() {
 
@@ -22,6 +28,16 @@ class ARSceneViewActivity : ComponentActivity() {
     private lateinit var arRenderer: ARRenderer
     private lateinit var onnxHandler: OnnxRuntimeHandler
     private lateinit var overlayView: OverlayView
+
+    private val cameraPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            arSceneView.arCore.resume(this, this)
+        } else {
+            finish() // ปิด activity ถ้าไม่อนุญาต
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -91,11 +107,12 @@ class ARSceneViewActivity : ComponentActivity() {
         rootLayout.addView(backButton, buttonParams)
 
         setContentView(rootLayout)
+
+        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
     override fun onStart() {
         super.onStart()
-        arSceneView.arCore.resume(this, this)
     }
 
     override fun onStop() {
@@ -104,8 +121,6 @@ class ARSceneViewActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        // Clear all nodes
-        // arRenderer.clearNodes(arSceneView)
         arSceneView.destroy()
         super.onDestroy()
     }

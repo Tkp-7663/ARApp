@@ -12,7 +12,7 @@ import io.github.sceneview.math.toFloat3
 import io.github.sceneview.node.PlaneNode
 import dev.romainguy.kotlin.math.Float3
 import kotlin.math.sqrt
-
+import android.util.Log
 
 class ARRenderer {
 
@@ -27,21 +27,32 @@ class ARRenderer {
 
     // Update / reuse red boxes
     fun renderModelBoxes(sceneView: ARSceneView, pose3DList: List<Pose3D>, minDistance: Float = 0.25f) {
-        // ซ่อน node เก่า
-        redNodes.forEach { it.isVisible = false }
+        Log.d("ARDebug", "Start rendering ${pose3DList.size} 3D poses")
 
-        for (pose in pose3DList) {
+        // ซ่อน node เก่า
+        redNodes.forEach { 
+            it.isVisible = false 
+        }
+        Log.d("ARDebug", "All existing redNodes hidden, count=${redNodes.size}")
+
+        for ((index, pose) in pose3DList.withIndex()) {
+            Log.d("ARDebug", "Processing pose #$index at position=${pose.position}, rotation=${pose.rotation}")
+
             // หา node ที่ใกล้ที่สุด
             val closestNode = redNodes.minByOrNull { distance(it.position, pose.position) }
+            val dist = closestNode?.let { distance(it.position, pose.position) } ?: Float.MAX_VALUE
+            Log.d("ARDebug", "Closest node distance=$dist")
 
-            if (closestNode != null && distance(closestNode.position, pose.position) < minDistance) {
+            if (closestNode != null && dist < minDistance) {
                 // Reuse node
+                Log.d("ARDebug", "Reusing existing node for pose #$index")
                 closestNode.position = pose.position
                 closestNode.rotation = pose.rotation
                 closestNode.scale = pose.scale
                 closestNode.isVisible = true
             } else {
                 // สร้าง PlaneNode ใหม่
+                Log.d("ARDebug", "Creating new PlaneNode for pose #$index")
                 val newNode = PlaneNode(
                     engine = sceneView.engine,
                     size = Float3(0.45f, 0.45f, 0f),
@@ -57,8 +68,11 @@ class ARRenderer {
 
                 sceneView.addChildNode(newNode)
                 redNodes.add(newNode)
+                Log.d("ARDebug", "New node added, total redNodes=${redNodes.size}")
             }
         }
+
+        Log.d("ARDebug", "Finished rendering 3D model boxes")
     }
 
     private fun distance(p1: Float3, p2: Float3): Float {
@@ -71,14 +85,18 @@ class ARRenderer {
     // Get 3D positions with hitTest (แก้ให้ตรง YOLOv11n)
     fun get3DPos(frame: Frame, detections: List<Detection>, confidenceThreshold: Float = 0.3f): List<Pose3D> {
         val poses = mutableListOf<Pose3D>()
+        Log.d("ARDebug", "Start computing 3D poses from ${detections.size} detections")
 
-        detections.forEach { det ->
-            if (det.confidence < confidenceThreshold) return@forEach
+        detections.forEachIndexed { index, det ->
+            Log.d("ARDebug", "Processing detection #$index: x=${det.xCenter}, y=${det.yCenter}, w=${det.width}, h=${det.height}, conf=${det.confidence}")
+
+            if (det.confidence < confidenceThreshold) {
+                Log.d("ARDebug", "Detection #$index skipped due to confidence < $confidenceThreshold")
+                return@forEachIndexed
+            }
 
             val centerX = det.xCenter
             val centerY = det.yCenter
-
-            // ปรับ top และ right ตามสัดส่วน 10%
             val topX = centerX
             val topY = centerY - det.height * 0.1f
             val rightX = centerX + det.width * 0.1f
@@ -88,27 +106,33 @@ class ARRenderer {
             val hitsTop = frame.hitTest(topX, topY)
             val hitsRight = frame.hitTest(rightX, rightY)
 
-            if (hitsCenter.isEmpty() || hitsTop.isEmpty() || hitsRight.isEmpty()) return@forEach
+            Log.d("ARDebug", "Detection #$index hits: center=${hitsCenter.size}, top=${hitsTop.size}, right=${hitsRight.size}")
+
+            if (hitsCenter.isEmpty() || hitsTop.isEmpty() || hitsRight.isEmpty()) {
+                Log.d("ARDebug", "Detection #$index skipped due to missing hit test results")
+                return@forEachIndexed
+            }
 
             val p0 = hitsCenter[0].hitPose.toVector3()
             val p1 = hitsTop[0].hitPose.toVector3()
             val p2 = hitsRight[0].hitPose.toVector3()
 
-            // คำนวณแกน
             val forwardAxis = Vector3.subtract(p1, p0).normalized()
             val rightAxis = Vector3.subtract(p2, p0).normalized()
             val upAxis = Vector3.cross(forwardAxis, rightAxis).normalized()
 
-            // สร้าง Quaternion จากแกน
             val rotation = Quaternion.lookRotation(forwardAxis, upAxis)
+            val euler = rotation.getEulerAngles()
 
-            // ใช้ Quaternion โดยตรง (ถ้า Pose3D ต้องการ Euler ให้แปลง)
+            Log.d("ARDebug", "Detection #$index pose: position=(${p0.x}, ${p0.y}, ${p0.z}), rotation Euler=(${euler.x}, ${euler.y}, ${euler.z})")
+
             poses.add(Pose3D(
                 position = p0.toFloat3(),
-                rotation = rotation.getEulerAngles().toFloat3()
+                rotation = euler.toFloat3()
             ))
         }
 
+        Log.d("ARDebug", "Finished computing 3D poses. Total valid poses: ${poses.size}")
         return poses
     }
 

@@ -36,15 +36,42 @@ class OnnxRuntimeHandler(private val context: Context) {
 
     // ARCore Frame -> FloatArray Tensor
     fun convertYUVToTensor(frame: Frame): FloatArray {
-        val image = frame.acquireCameraImage()
-        try {
+        var image: Image? = null
+        return try {
+            image = frame.acquireCameraImage()
+
+            if (image.format == android.graphics.ImageFormat.YUV_420_888) {
+                Log.d("ARDebug", "Image format is YUV_420_888 - CORRECT FORMAT!")
+            } else {
+                Log.e("ARDebug", "Wrong image format: ${image.format}")
+            }
+
+            // แปลง YUV -> RGB array
             val rgb = convertYUVToRGB(image)
+            Log.d("ARDebug", "RGB array created, size: ${rgb.size}")
+
+            // แปลง RGB -> Bitmap
             val bitmap = convertRGBToBitmap(rgb, image.width, image.height)
+            Log.d("ARDebug", "Bitmap created, size: ${bitmap.width}x${bitmap.height}, config: ${bitmap.config}")
+
+            // Resize bitmap
             val resized = resizeBitmap(bitmap, INPUT_SIZE, INPUT_SIZE)
+            Log.d("ARDebug", "Bitmap resized to: ${resized.width}x${resized.height}")
+
+            // Convert bitmap -> tensor
             val tensor = convertBitmapToTensor(resized)
-            return normalizeTensor(tensor)
+            Log.d("ARDebug", "Tensor created, length: ${tensor.size}")
+
+            // Normalize tensor
+            normalizeTensor(tensor)
+
+        } catch (e: Exception) {
+            Log.e("ARDebug", "Error processing image: ", e)
+            // คืนค่า default tensor ถ้าเกิด error (all zeros)
+            FloatArray(3 * INPUT_SIZE * INPUT_SIZE) { 0f }
         } finally {
-            image.close() // ป้องกัน memory leak
+            image?.close()
+            Log.v("ARDebug", "Image closed successfully")
         }
     }
 
@@ -140,18 +167,24 @@ class OnnxRuntimeHandler(private val context: Context) {
 
     // Run inference with ONNX Runtime
     fun runOnnxInference(tensor: FloatArray): List<Detection> {
+        Log.d("ARDebug", "Preparing input tensor for ONNX, shape = [1, 3, $INPUT_SIZE, $INPUT_SIZE]")
+        
         val shape = longArrayOf(1, 3, INPUT_SIZE.toLong(), INPUT_SIZE.toLong())
         val floatBuffer = java.nio.FloatBuffer.wrap(tensor)
         val inputTensor = OnnxTensor.createTensor(env, floatBuffer, shape)
+        Log.d("ARDebug", "Input tensor created successfully")
 
         val result = session.run(mapOf("images" to inputTensor))
+
         val output = result[0].value
+        Log.d("ARDebug", "Raw output type: ${output!!::class}, output = $output")
 
         if (output is Array<*>) {
             // output = [[[...]]]  shape (1,5,2100)
             val arr = output as Array<Array<FloatArray>>
             val detections = mutableListOf<Detection>()
             val boxes = arr[0]   // shape (5,2100)
+            Log.d("ARDebug", "Processing output array, boxes shape: [${boxes.size}, ${boxes[0].size}]")
 
             for (i in 0 until boxes[0].size) {
                 val x = boxes[0][i]
@@ -160,12 +193,19 @@ class OnnxRuntimeHandler(private val context: Context) {
                 val h = boxes[3][i]
                 val conf = boxes[4][i]
 
-                if (conf > 0.25f) { // threshold
+                if (conf > 0.1f) { // threshold
                     detections.add(Detection(x, y, w, h, conf))
+                    Log.d("ARDebug", "Detection added: x=$x, y=$y, w=$w, h=$h, conf=$conf")
+                } else {
+                    Log.d("ARDebug", "Detection skipped (conf too low): x=$x, y=$y, w=$w, h=$h, conf=$conf")
                 }
             }
+
+            Log.d("ARDebug", "Total valid detections: ${detections.size}")
             return detections
+
         } else {
+            Log.e("ARDebug", "Unexpected output type: ${output!!::class}")
             throw IllegalArgumentException("Unexpected output type: ${output!!::class}")
         }
     }

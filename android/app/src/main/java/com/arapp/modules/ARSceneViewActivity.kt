@@ -202,17 +202,28 @@ class ARSceneViewActivity : ComponentActivity() {
                             Log.d("ARDebug", "Overlay updated successfully")
                         }
 
-                        Log.d("ARDebug", "Start rendering 3D model boxes")
-                        val pos3D = arRenderer.get3DPos(frame, detections)
-                        Log.d("ARDebug", "3D positions calculated, count=${pos3D.size}")
-                        if (pos3D.isNotEmpty()) {
+                        val bestDetection = detections.maxByOrNull { it.confidence }
+                        Log.d("ARDebug", "Start rendering simple cube node")
+                        if (bestDetection != null) {
                             runOnUiThread {
-                                arRenderer.renderModelBoxes(arSceneView, pos3D)
-                                Log.d("ARDebug", "3D model boxes rendered successfully")
+                                arRenderer.renderSimpleCubeNode(arSceneView, bestDetection)
+                                Log.d("ARDebug", "Rendered simple cube node for detection: $bestDetection")
                             }
                         } else {
-                            Log.d("ARDebug", "No 3D positions to render")
+                            Log.d("ARDebug", "No detections to render")
                         }
+
+                        // Log.d("ARDebug", "Start rendering 3D model boxes")
+                        // val pos3D = arRenderer.get3DPos(frame, detections)
+                        // Log.d("ARDebug", "3D positions calculated, count=${pos3D.size}")
+                        // if (pos3D.isNotEmpty()) {
+                        //     runOnUiThread {
+                        //         arRenderer.renderModelBoxes(arSceneView, pos3D)
+                        //         Log.d("ARDebug", "3D model boxes rendered successfully")
+                        //     }
+                        // } else {
+                        //     Log.d("ARDebug", "No 3D positions to render")
+                        // }
 
                     } catch (e: Exception) {
                         Log.e("ARSceneViewActivity", "Error in onFrame", e)

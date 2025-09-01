@@ -57,7 +57,7 @@ class ARRenderer {
                     engine = sceneView.engine,
                     size = Float3(0.45f, 0.45f, 0f),
                     materialInstance = sceneView.materialLoader.createColorInstance(
-                        Color.argb((0.3f * 255).toInt(), 255, 0, 0)
+                        Color.RED //argb((0.3f * 255).toInt(), 255, 0, 0)
                     )
                 ).apply {
                     position = pose.position
@@ -146,5 +146,63 @@ class ARRenderer {
         redNodes.forEach { sceneView.removeChildNode(it) }
         blueNodes.clear()
         redNodes.clear()
+    }
+
+    data class Detection(
+        val xCenter: Float,
+        val yCenter: Float,
+        val width: Float,
+        val height: Float,
+        val confidence: Float,
+    )
+
+    private var cubeNode: CubeNode? = null
+
+    fun renderSimpleCubeNode(sceneView: ARSceneView, detection: Detection) {
+        // ได้ center จาก onnx (ขนาด input 320x320)
+        val onnxX = detection.xCenter
+        val onnxY = detection.yCenter
+
+        // normalize -> screen pixel
+        val normX = onnxX / 320f
+        val normY = onnxY / 320f
+        val screenX = normX * sceneView.width
+        val screenY = normY * sceneView.height
+
+        val centerX = sceneView.width / 2f
+        val centerY = sceneView.height / 2f
+        val initialPos = sceneView.screenToWorld(centerX, centerY, z = 1.0f)
+
+        // screen -> world (fix z = 1m)
+        val worldPos = sceneView.screenToWorld(screenX, screenY, z = 1.0f)
+
+        Log.d(
+            "ARDebug",
+            "Render cube from detection: onnx=($onnxX,$onnxY) -> screen=($screenX,$screenY) -> world=$worldPos conf=${detection.confidence}"
+        )
+
+        if (cubeNode == null) {
+            // สร้างใหม่ครั้งแรก
+            cubeNode = CubeNode(
+                engine = sceneView.engine,
+                size = Float3(0.4f, 0.4f, 0.4f), // 40 cm
+                materialInstance = sceneView.materialLoader.createColorInstance(Color.RED)
+            ).apply {
+                position = initialPos
+                rotation = Float3(0f, 0f, 0f)
+                scale = Float3(1f, 1f, 1f)
+                isVisible = true
+            }
+            sceneView.addChildNode(cubeNode!!)
+            Log.d("ARDebug", "New cube created at world=$worldPos")
+        } else {
+            // อัปเดตตำแหน่ง cube เดิม
+            cubeNode?.apply {
+                this.position = worldPos
+                this.rotation = Float3(0f, 0f, 0f)
+                this.isVisible = true
+            }
+            Log.d("ARDebug", "Cube updated at world=$worldPos")
+        }
     }
 }

@@ -202,12 +202,12 @@ class ARSceneViewActivity : ComponentActivity() {
                             Log.d("ARDebug", "Overlay updated successfully")
                         }
 
-                        val bestDetection = detections.maxByOrNull { it.confidence }
+                        // val bestDetection = detections.maxByOrNull { it.confidence }
                         Log.d("ARDebug", "Start rendering simple cube node")
-                        if (bestDetection != null) {
+                        if (detections.isNotEmpty()) {
                             runOnUiThread {
-                                arRenderer.renderSimpleCubeNode(arSceneView, bestDetection)
-                                Log.d("ARDebug", "Rendered simple cube node for detection: $bestDetection")
+                                arRenderer.renderSimpleCubeNode(arSceneView, detections[0])
+                                Log.d("ARDebug", "Rendered simple cube node for detection: ${detections[0]}")
                             }
                         } else {
                             Log.d("ARDebug", "No detections to render")

@@ -2,14 +2,17 @@ package com.arapp.modules
 
 import com.google.ar.core.Frame
 import android.graphics.Color
+import android.view.View
 import io.github.sceneview.ar.ARSceneView
 import io.github.sceneview.math.*
-import io.github.sceneview.node.Node
+import io.github.sceneview.utils.screenToWorld
 import io.github.sceneview.collision.Quaternion
 import io.github.sceneview.collision.Vector3
 import io.github.sceneview.math.Position
 import io.github.sceneview.math.toFloat3
+import io.github.sceneview.node.Node
 import io.github.sceneview.node.PlaneNode
+import io.github.sceneview.node.CubeNode
 import dev.romainguy.kotlin.math.Float3
 import kotlin.math.sqrt
 import android.util.Log
@@ -158,27 +161,25 @@ class ARRenderer {
 
     private var cubeNode: CubeNode? = null
 
-    fun renderSimpleCubeNode(sceneView: ARSceneView, detection: Detection) {
-        // ได้ center จาก onnx (ขนาด input 320x320)
-        val onnxX = detection.xCenter
-        val onnxY = detection.yCenter
+    fun renderSimpleCubeNode(sceneView: ARSceneView, detection: com.arapp.modules.Detection) {
+        // แปลง onnx 320x320 -> normalized screen coordinates
+        val normalizedX = (detection.xCenter / 320f) * 2f - 1f  // -1 to 1
+        val normalizedY = (detection.yCenter / 320f) * 2f - 1f  // -1 to 1
+        
+        // Simple 3D position calculation - place cube 1 meter in front of camera
+        val distance = 1.0f
+        val worldPos = Float3(
+            normalizedX * distance * 0.5f,  // Scale based on field of view
+            -normalizedY * distance * 0.5f, // Flip Y coordinate
+            -distance  // In front of camera (negative Z in camera space)
+        )
 
-        // normalize -> screen pixel
-        val normX = onnxX / 320f
-        val normY = onnxY / 320f
-        val screenX = normX * sceneView.width
-        val screenY = normY * sceneView.height
-
-        val centerX = sceneView.width / 2f
-        val centerY = sceneView.height / 2f
-        val initialPos = sceneView.screenToWorld(centerX, centerY, z = 1.0f)
-
-        // screen -> world (fix z = 1m)
-        val worldPos = sceneView.screenToWorld(screenX, screenY, z = 1.0f)
+        // Center position for initial cube placement
+        // val initialPos = Float3(0f, 0f, -1.0f)
 
         Log.d(
             "ARDebug",
-            "Render cube from detection: onnx=($onnxX,$onnxY) -> screen=($screenX,$screenY) -> world=$worldPos conf=${detection.confidence}"
+            "Render cube from detection: screen=($normalizedX,$normalizedY) -> world=$worldPos conf=${detection.confidence}"
         )
 
         if (cubeNode == null) {
@@ -188,7 +189,7 @@ class ARRenderer {
                 size = Float3(0.4f, 0.4f, 0.4f), // 40 cm
                 materialInstance = sceneView.materialLoader.createColorInstance(Color.RED)
             ).apply {
-                position = initialPos
+                position = worldPos
                 rotation = Float3(0f, 0f, 0f)
                 scale = Float3(1f, 1f, 1f)
                 isVisible = true
@@ -197,10 +198,12 @@ class ARRenderer {
             Log.d("ARDebug", "New cube created at world=$worldPos")
         } else {
             // อัปเดตตำแหน่ง cube เดิม
-            cubeNode?.apply {
-                this.position = worldPos
-                this.rotation = Float3(0f, 0f, 0f)
-                this.isVisible = true
+            if (detection.confidence > 0.5f) {
+                cubeNode?.apply {
+                    this.position = worldPos
+                    this.rotation = Float3(0f, 0f, 0f)
+                    this.isVisible = true
+                }
             }
             Log.d("ARDebug", "Cube updated at world=$worldPos")
         }

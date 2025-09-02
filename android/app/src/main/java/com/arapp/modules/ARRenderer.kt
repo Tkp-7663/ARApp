@@ -16,6 +16,9 @@ import io.github.sceneview.node.CubeNode
 import dev.romainguy.kotlin.math.Float3
 import kotlin.math.sqrt
 import android.util.Log
+import com.google.ar.core.AugmentedImage
+import com.google.ar.core.TrackingState
+import io.github.sceneview.node.ModelNode
 
 class ARRenderer {
 
@@ -186,10 +189,8 @@ class ARRenderer {
             // สร้างใหม่ครั้งแรก
             cubeNode = CubeNode(
                 engine = sceneView.engine,
-                if (detection.confidence > 0.4f) {
-                    size = Float3(0.4f, 0.4f, 0.4f), // 40 cm
-                    materialInstance = sceneView.materialLoader.createColorInstance(Color.RED)
-                }
+                size = Float3(0.4f, 0.4f, 0.4f), // 40 cm
+                materialInstance = sceneView.materialLoader.createColorInstance(Color.RED)
             ).apply {
                 position = worldPos
                 rotation = Float3(0f, 0f, 0f)
@@ -200,14 +201,127 @@ class ARRenderer {
             Log.d("ARDebug", "New cube created at world=$worldPos")
         } else {
             // อัปเดตตำแหน่ง cube เดิม
-            if (detection.confidence > 0.4f) {
-                cubeNode?.apply {
-                    this.position = worldPos
-                    this.rotation = Float3(0f, 0f, 0f)
-                    this.isVisible = true
-                }
+            cubeNode?.apply {
+                this.position = worldPos
+                this.rotation = Float3(0f, 0f, 0f)
+                this.isVisible = true
             }
             Log.d("ARDebug", "Cube updated at world=$worldPos")
         }
     }
+
+    // private var wheelNode: ModelNode? = null
+    // private var isModelLoaded = false
+
+    // fun renderWithMarker(sceneView: ARSceneView, frame: Frame) {
+    //     // เอา trackables ที่เป็น AugmentedImage (marker ที่ ARCore track ได้)
+    //     val updatedAugmentedImages = frame.getUpdatedTrackables(AugmentedImage::class.java)
+
+    //     for (augmentedImage in updatedAugmentedImages) {
+    //         when (augmentedImage.trackingState) {
+    //             TrackingState.TRACKING -> {
+    //                 // ถ้า marker ถูก detect แล้ว
+    //                 val centerPose = augmentedImage.centerPose
+    //                 val position = Float3(
+    //                     centerPose.tx(),
+    //                     centerPose.ty(),
+    //                     centerPose.tz()
+    //                 )
+
+    //                 // แปลงจาก Pose rotation เป็น Euler angles
+    //                 val rotation = poseToEulerAngles(centerPose)
+
+    //                 if (wheelNode == null && !isModelLoaded) {
+    //                     isModelLoaded = true
+                        
+    //                     // สร้าง ModelNode ใหม่ตาม API ของ SceneView
+    //                     wheelNode = ModelNode().apply {
+    //                         // โหลดโมเดลแบบ async
+    //                         loadModelAsync(
+    //                             context = sceneView.context,
+    //                             lifecycle = sceneView.lifecycle,
+    //                             modelFileLocation = "models/wheel.obj", // เก็บใน android/app/src/main/assets/models/
+    //                             autoAnimate = false,
+    //                             scaleToUnits = 1.0f, // ขนาดหน่วยเป็นเมตร
+    //                             centerOrigin = Position(0.0f, 0.0f, 0.0f)
+    //                         ) { modelInstance, exception ->
+    //                             if (exception != null) {
+    //                                 Log.e("ARDebug", "Failed to load wheel model", exception)
+    //                                 isModelLoaded = false
+    //                             } else {
+    //                                 Log.d("ARDebug", "Wheel model loaded successfully")
+    //                                 // ตั้งค่าเริ่มต้นหลังโหลดเสร็จ
+    //                                 this.position = position
+    //                                 this.rotation = rotation
+    //                                 this.scale = Float3(0.2f, 0.2f, 0.2f)
+    //                                 this.isVisible = true
+    //                             }
+    //                         }
+    //                     }
+                        
+    //                     sceneView.addChildNode(wheelNode!!)
+    //                     Log.d("ARDebug", "Created wheel model node at marker pos=$position")
+                        
+    //                 } else if (wheelNode != null && isModelLoaded) {
+    //                     // อัปเดตตำแหน่งและการหมุนของโมเดลตาม marker
+    //                     wheelNode?.apply {
+    //                         this.position = position
+    //                         this.rotation = rotation
+    //                         this.isVisible = true
+    //                     }
+    //                     Log.d("ARDebug", "Updated wheel model at marker pos=$position, rotation=$rotation")
+    //                 }
+    //             }
+
+    //             TrackingState.PAUSED -> {
+    //                 // marker ถูก track แต่อาจจะไม่ค่อยชัด → แสดงโมเดลแต่อาจจะโปร่งใส
+    //                 wheelNode?.apply {
+    //                     isVisible = true
+    //                     // อาจจะลดความโปร่งใสลง
+    //                 }
+    //                 Log.d("ARDebug", "Marker tracking paused, keeping wheel visible")
+    //             }
+
+    //             TrackingState.STOPPED -> {
+    //                 // marker หายไป → ซ่อนโมเดล
+    //                 wheelNode?.isVisible = false
+    //                 Log.d("ARDebug", "Marker lost, wheel hidden")
+    //             }
+    //         }
+    //     }
+    // }
+
+    // // ฟังก์ชันแปลง Pose เป็น Euler angles สำหรับการหมุน
+    // private fun poseToEulerAngles(pose: Pose): Float3 {
+    //     val quaternion = pose.rotationQuaternion
+        
+    //     // แปลง Quaternion เป็น Euler angles (X, Y, Z rotation in degrees)
+    //     val sinr_cosp = 2 * (quaternion[3] * quaternion[0] + quaternion[1] * quaternion[2])
+    //     val cosr_cosp = 1 - 2 * (quaternion[0] * quaternion[0] + quaternion[1] * quaternion[1])
+    //     val roll = Math.atan2(sinr_cosp.toDouble(), cosr_cosp.toDouble())
+
+    //     val sinp = 2 * (quaternion[3] * quaternion[1] - quaternion[2] * quaternion[0])
+    //     val pitch = if (Math.abs(sinp) >= 1) {
+    //         Math.copySign(Math.PI / 2, sinp.toDouble())
+    //     } else {
+    //         Math.asin(sinp.toDouble())
+    //     }
+
+    //     val siny_cosp = 2 * (quaternion[3] * quaternion[2] + quaternion[0] * quaternion[1])
+    //     val cosy_cosp = 1 - 2 * (quaternion[1] * quaternion[1] + quaternion[2] * quaternion[2])
+    //     val yaw = Math.atan2(siny_cosp.toDouble(), cosy_cosp.toDouble())
+
+    //     return Float3(
+    //         Math.toDegrees(roll).toFloat(),
+    //         Math.toDegrees(pitch).toFloat(),
+    //         Math.toDegrees(yaw).toFloat()
+    //     )
+    // }
+
+    // // ฟังก์ชันสำหรับล้าง resources เมื่อไม่ต้องการใช้แล้ว
+    // fun cleanup() {
+    //     wheelNode?.destroy()
+    //     wheelNode = null
+    //     isModelLoaded = false
+    // }
 }

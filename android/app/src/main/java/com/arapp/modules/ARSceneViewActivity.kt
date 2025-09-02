@@ -14,7 +14,8 @@ import com.arapp.utils.OnnxRuntimeHandler
 import com.google.ar.core.Frame
 import com.google.ar.core.Session
 import com.google.ar.core.Config
-
+import com.google.ar.core.AugmentedImage
+import com.google.ar.core.TrackingState
 
 class ARSceneViewActivity : ComponentActivity() {
 
@@ -22,6 +23,7 @@ class ARSceneViewActivity : ComponentActivity() {
     private lateinit var onnxHandler: OnnxRuntimeHandler
     private lateinit var overlayView: OverlayView
     private lateinit var arRenderer: ARRenderer
+    private lateinit var markerRenderer: MarkerRenderer
     private var session: Session? = null
     private var isARSessionStarted = false
 
@@ -68,6 +70,14 @@ class ARSceneViewActivity : ComponentActivity() {
             Log.d("ARDebug", "AR Renderer initialized")
         } catch (e: Exception) {
             Log.e("ARDebug", "Failed to initialize AR Renderer", e)
+            throw e
+        }
+
+        try {
+            markerRenderer = MarkerRenderer(this)
+            Log.d("ARDebug", "Marker Renderer initialized")
+        } catch (e: Exception) {
+            Log.e("ARDebug", "Failed to initialize Marker Renderer", e)
             throw e
         }
 
@@ -135,110 +145,189 @@ class ARSceneViewActivity : ComponentActivity() {
     }
 
     private fun startARSession() {
-        Log.d("ARDebug", "startARSession called")
         if (isARSessionStarted) return
-        
-        Log.d("ARDebug", "Starting AR Session...")
+
         try {
-            // Configure AR session
             arSceneView.configureSession { session, config ->
-                Log.d("ARDebug", "Inside configureSession callback")
                 this.session = session
-                config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
-                config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
-                config.lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
-                try {
-                    session.configure(config)
-                    Log.d("ARDebug", "AR Session configured successfully")
-                } catch (e: Exception) {
-                    Log.e("ARDebug", "Session configuration failed", e)
-                    throw e
-                }
+
+                // ให้ MarkerRenderer ใช้ session ของ ARSceneView
+                markerRenderer.session = session
+                markerRenderer.setupDatabase()
+
+                Log.d("ARSceneViewActivity", "AR session configured and marker database set")
             }
 
-            Log.d("ARDebug", "Setting up onFrame callback...")
+            arSceneView.onFrame = onFrame@ { _ ->
+                val frame = arSceneView.frame ?: return@onFrame
+                Log.d("ARSceneViewActivity", "Frame timestamp=${frame.timestamp}, cameraTrackingState=${frame.camera.trackingState}")
 
-            // ตั้งค่า onFrame callback
-            arSceneView.onFrame = { _ ->
-                session?.let { s ->
-                    try {
-                        Log.d("ARDebug", "Updating AR frame...")
-                        val frame: Frame = s.update()
-                        Log.d("ARDebug", "Frame updated successfully: timestamp=${frame.timestamp}")
+                if (frame.camera.trackingState != TrackingState.TRACKING) return@onFrame
 
-                        // val now = System.nanoTime()
-                        // if (now - lastFrameTime < frameIntervalNs) {
-                        //     return@let
-                        // }
-                        // lastFrameTime = now
-                        // Log.d("ARDebug", "Processing frame at 30fps, timestamp=$lastFrameTime")
+                val updatedImages: Collection<AugmentedImage> = frame.getUpdatedTrackables(AugmentedImage::class.java)
+                Log.d("ARSceneViewActivity", "Updated markers count=${updatedImages.size}")
 
-                        Log.d("ARDebug", "Start converting YUV to tensor")
-                        val tensor = onnxHandler.convertYUVToTensor(frame)
-                        Log.d("ARDebug", "Tensor conversion completed, length=${tensor.size}")
-
-                        Log.d("ARDebug", "Start running ONNX inference")
-                        val output = onnxHandler.runOnnxInference(tensor)
-                        Log.d("ARDebug", "ONNX inference completed, detections found: ${output.size}")
-
-                        val detections: List<com.arapp.modules.Detection> = output.map { det ->
-                            Log.d(
-                                "ARDebug",
-                                "Mapping detection: x=${det.x}, y=${det.y}, w=${det.w}, h=${det.h}, conf=${det.confidence}"
-                            )
-                            com.arapp.modules.Detection(
-                                xCenter = det.x,
-                                yCenter = det.y,
-                                width = det.w,
-                                height = det.h,
-                                confidence = det.confidence
-                            )
+                for (img in updatedImages) {
+                    Log.d("ARSceneViewActivity", "Marker: ${img.name}, state=${img.trackingState}")
+                    if (img.trackingState == TrackingState.TRACKING) {
+                        if (!markerRenderer.isModelLoaded) {
+                            markerRenderer.loadModel(arSceneView)
                         }
-
-                        Log.d("ARDebug", "Start overlay update, detections count=${detections.size}")
-                        runOnUiThread {
-                            overlayView.detections = detections
-                            overlayView.invalidate()
-                            Log.d("ARDebug", "Overlay updated successfully")
-                        }
-
-                        // val bestDetection = detections.maxByOrNull { it.confidence }
-                        Log.d("ARDebug", "Start rendering simple cube node")
-                        if (detections.isNotEmpty()) {
-                            runOnUiThread {
-                                arRenderer.renderSimpleCubeNode(arSceneView, detections[0])
-                                Log.d("ARDebug", "Rendered simple cube node for detection: ${detections[0]}")
-                            }
-                        } else {
-                            Log.d("ARDebug", "No detections to render")
-                        }
-
-                        // Log.d("ARDebug", "Start rendering 3D model boxes")
-                        // val pos3D = arRenderer.get3DPos(frame, detections)
-                        // Log.d("ARDebug", "3D positions calculated, count=${pos3D.size}")
-                        // if (pos3D.isNotEmpty()) {
-                        //     runOnUiThread {
-                        //         arRenderer.renderModelBoxes(arSceneView, pos3D)
-                        //         Log.d("ARDebug", "3D model boxes rendered successfully")
-                        //     }
-                        // } else {
-                        //     Log.d("ARDebug", "No 3D positions to render")
-                        // }
-
-                    } catch (e: Exception) {
-                        Log.e("ARSceneViewActivity", "Error in onFrame", e)
+                        markerRenderer.updateNodePosition(img)
+                    } else {
+                        // ถ้า PAUSED หรือ STOPPED
+                        markerRenderer.updateNodePosition(img)
                     }
                 }
             }
 
             isARSessionStarted = true
-            
+            Log.d("ARSceneViewActivity", "AR Session started")
         } catch (e: Exception) {
-            Log.e("ARSceneViewActivity", "Failed to configure AR session", e)
+            Log.e("ARSceneViewActivity", "Failed to start AR session", e)
             Toast.makeText(this, "Failed to start AR: ${e.message}", Toast.LENGTH_SHORT).show()
             finish()
         }
     }
+
+
+    // private fun startARSession() {
+    //     Log.d("ARDebug", "startARSession called")
+    //     if (isARSessionStarted) return
+        
+    //     Log.d("ARDebug", "Starting AR Session...")
+    //     try {
+    //         // Configure AR session
+    //         arSceneView.configureSession { session, config ->
+    //             Log.d("ARDebug", "Inside configureSession callback")
+    //             this.session = session
+    //             config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
+    //             config.planeFindingMode = Config.PlaneFindingMode.HORIZONTAL
+    //             config.lightEstimationMode = Config.LightEstimationMode.ENVIRONMENTAL_HDR
+
+    //             markerRenderer.session = session
+    //             markerRenderer.setupDatabase()
+    //             Log.d("ARSceneViewActivity", "AR session configured and marker database set")
+    //             try {
+    //                 session.configure(config)
+    //                 Log.d("ARDebug", "AR Session configured successfully")
+    //             } catch (e: Exception) {
+    //                 Log.e("ARDebug", "Session configuration failed", e)
+    //                 throw e
+    //             }
+    //         }
+
+    //         Log.d("ARDebug", "Setting up onFrame callback...")
+
+    //         // ตั้งค่า onFrame callback
+    //         arSceneView.onFrame = { _ ->
+    //             session?.let { s ->
+    //                 try {
+    //                     Log.d("ARDebug", "Updating AR frame...")
+    //                     val frame: Frame = s.update()
+    //                     Log.d("ARDebug", "Frame updated successfully: timestamp=${frame.timestamp}")
+    //                     // val frame = arSceneView.arFrame ?: return@onFrame
+    //                     // Log.d("ARSceneViewActivity", "Frame timestamp=${frame.timestamp}, cameraTrackingState=${frame.camera.trackingState}")
+
+    //                     val updatedImages = frame.getUpdatedTrackables(AugmentedImage::class.java)
+    //                     Log.d("ARSceneViewActivity", "Updated markers count=${updatedImages.size}")
+
+    //                     for (img in updatedImages) {
+    //                         Log.d("ARSceneViewActivity", "Marker: ${img.name}, state=${img.trackingState}")
+    //                         if (img.trackingState == TrackingState.TRACKING) {
+    //                             if (!markerRenderer.isModelLoaded) {
+    //                                 markerRenderer.loadModel(arSceneView)
+    //                             }
+    //                             markerRenderer.updateNodePosition(img)
+    //                         } else {
+    //                             // ถ้า PAUSED หรือ STOPPED
+    //                             markerRenderer.updateNodePosition(img)
+    //                         }
+    //                     }
+
+
+    //                     // render model with marker
+    //                     // try {
+    //                     //     markerRenderer.loadModel(arSceneView)
+    //                     //     // ทุก frame ใน onUpdate หรือ onDraw
+    //                     // } catch (e: Exception) {
+    //                     //     Log.e("ARDebug", "Error loading model", e)
+    //                     // }
+    //                     // markerRenderer.renderWithMarker(arSceneView, frame)
+                        
+    //                     // val now = System.nanoTime()
+    //                     // if (now - lastFrameTime < frameIntervalNs) {
+    //                     //     return@let
+    //                     // }
+    //                     // lastFrameTime = now
+    //                     // Log.d("ARDebug", "Processing frame at 30fps, timestamp=$lastFrameTime")
+
+    //                     Log.d("ARDebug", "Start converting YUV to tensor")
+    //                     val tensor = onnxHandler.convertYUVToTensor(frame)
+    //                     Log.d("ARDebug", "Tensor conversion completed, length=${tensor.size}")
+
+    //                     Log.d("ARDebug", "Start running ONNX inference")
+    //                     val output = onnxHandler.runOnnxInference(tensor)
+    //                     Log.d("ARDebug", "ONNX inference completed, detections found: ${output.size}")
+
+    //                     val detections: List<com.arapp.modules.Detection> = output.map { det ->
+    //                         Log.d(
+    //                             "ARDebug",
+    //                             "Mapping detection: x=${det.x}, y=${det.y}, w=${det.w}, h=${det.h}, conf=${det.confidence}"
+    //                         )
+    //                         com.arapp.modules.Detection(
+    //                             xCenter = det.x,
+    //                             yCenter = det.y,
+    //                             width = det.w,
+    //                             height = det.h,
+    //                             confidence = det.confidence
+    //                         )
+    //                     }
+
+    //                     // Log.d("ARDebug", "Start overlay update, detections count=${detections.size}")
+    //                     // runOnUiThread {
+    //                     //     overlayView.detections = detections
+    //                     //     overlayView.invalidate()
+    //                     //     Log.d("ARDebug", "Overlay updated successfully")
+    //                     // }
+
+    //                     // val bestDetection = detections.maxByOrNull { it.confidence }
+    //                     // Log.d("ARDebug", "Start rendering simple cube node")
+    //                     // if (detections.isNotEmpty()) {
+    //                     //     runOnUiThread {
+    //                     //         arRenderer.renderSimpleCubeNode(arSceneView, detections[0])
+    //                     //         Log.d("ARDebug", "Rendered simple cube node for detection: ${detections[0]}")
+    //                     //     }
+    //                     // } else {
+    //                     //     Log.d("ARDebug", "No detections to render")
+    //                     // }
+
+    //                     // Log.d("ARDebug", "Start rendering 3D model boxes")
+    //                     // val pos3D = arRenderer.get3DPos(frame, detections)
+    //                     // Log.d("ARDebug", "3D positions calculated, count=${pos3D.size}")
+    //                     // if (pos3D.isNotEmpty()) {
+    //                     //     runOnUiThread {
+    //                     //         arRenderer.renderModelBoxes(arSceneView, pos3D)
+    //                     //         Log.d("ARDebug", "3D model boxes rendered successfully")
+    //                     //     }
+    //                     // } else {
+    //                     //     Log.d("ARDebug", "No 3D positions to render")
+    //                     // }
+
+    //                 } catch (e: Exception) {
+    //                     Log.e("ARSceneViewActivity", "Error in onFrame", e)
+    //                 }
+    //             }
+    //         }
+
+    //         isARSessionStarted = true
+            
+    //     } catch (e: Exception) {
+    //         Log.e("ARSceneViewActivity", "Failed to configure AR session", e)
+    //         Toast.makeText(this, "Failed to start AR: ${e.message}", Toast.LENGTH_SHORT).show()
+    //         finish()
+    //     }
+    // }
 
     override fun onStart() {
         super.onStart()

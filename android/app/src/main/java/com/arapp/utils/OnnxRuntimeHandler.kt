@@ -14,7 +14,7 @@ import android.util.Log
 class OnnxRuntimeHandler(private val context: Context) {
 
     companion object {
-        const val MODEL = "yolov11n.onnx"
+        const val MODEL = "ai/yolov11n.onnx"
         const val INPUT_SIZE = 320
     }
 

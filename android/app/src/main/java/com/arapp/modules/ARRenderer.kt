@@ -186,8 +186,10 @@ class ARRenderer {
             // สร้างใหม่ครั้งแรก
             cubeNode = CubeNode(
                 engine = sceneView.engine,
-                size = Float3(0.4f, 0.4f, 0.4f), // 40 cm
-                materialInstance = sceneView.materialLoader.createColorInstance(Color.RED)
+                if (detection.confidence > 0.4f) {
+                    size = Float3(0.4f, 0.4f, 0.4f), // 40 cm
+                    materialInstance = sceneView.materialLoader.createColorInstance(Color.RED)
+                }
             ).apply {
                 position = worldPos
                 rotation = Float3(0f, 0f, 0f)
@@ -198,7 +200,7 @@ class ARRenderer {
             Log.d("ARDebug", "New cube created at world=$worldPos")
         } else {
             // อัปเดตตำแหน่ง cube เดิม
-            if (detection.confidence > 0.5f) {
+            if (detection.confidence > 0.4f) {
                 cubeNode?.apply {
                     this.position = worldPos
                     this.rotation = Float3(0f, 0f, 0f)
